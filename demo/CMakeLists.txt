@@ -12,7 +12,7 @@ find_package(Qt5 REQUIRED COMPONENTS
     Widgets
 )
 
-add_executable(qgeoview-demo
+set(DEMO_SRCS
     main.cpp
     mainwindow.h
     mainwindow.cpp
@@ -47,7 +47,21 @@ add_executable(qgeoview-demo
     samples/mytiles.h
     samples/mytile.cpp
     samples/mytile.h
+	samples/polyline.cpp
+    samples/polyline.h
+	samples/placemarkSet.cpp
+	samples/placemarkSet.h
 )
+
+if(BUILD_GDAL_EXAMPLE)
+    find_package(GDAL REQUIRED)
+	include_directories(${GDAL_INCLUDE_DIRS})
+
+    list(APPEND DEMO_SRCS samples/raster.cpp)
+    list(APPEND DEMO_SRCS samples/raster.h)
+endif(BUILD_GDAL_EXAMPLE)
+
+add_executable(qgeoview-demo ${DEMO_SRCS})
 
 target_link_libraries(qgeoview-demo
     PRIVATE
@@ -56,4 +70,11 @@ target_link_libraries(qgeoview-demo
         Qt5::Gui
         Qt5::Widgets
         QGeoView
+		${GDAL_LIBRARY}
+)
+
+set_target_properties(qgeoview-demo
+    PROPERTIES
+        LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}
 )

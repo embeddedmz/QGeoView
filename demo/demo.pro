@@ -12,6 +12,7 @@ SOURCES += \
     samples/background.cpp \
     samples/customtiles.cpp \
     samples/ellipse.cpp \
+    samples/polyline.cpp \
     samples/flags.cpp \
     samples/items.cpp \
     samples/mouse.cpp \
@@ -30,6 +31,7 @@ HEADERS += \
     samples/background.h \
     samples/customtiles.h \
     samples/ellipse.h \
+    samples/polyline.h \
     samples/flags.h \
     samples/items.h \
     samples/mouse.h \

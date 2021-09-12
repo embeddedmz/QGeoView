@@ -26,6 +26,10 @@
 #include "samples/widgets.h"
 #include "ui_mainwindow.h"
 
+#include "samples/polyline.h"
+#include "samples/placemark.h"
+#include "samples/raster.h"
+
 #include <QAction>
 #include <QClipboard>
 #include <QDir>
@@ -144,6 +148,16 @@ void MainWindow::init()
      */
     auto target = ui->geoMap->getProjection()->boundaryGeoRect();
     ui->geoMap->cameraTo(QGVCameraActions(ui->geoMap).scaleTo(target));
+
+    QVector<QGV::GeoPos> linePoints {
+        QGV::GeoPos { 43.28849853885284, -0.40097961338582416 },
+        QGV::GeoPos { 43.288607663101814, -0.4011056068729572 },
+        QGV::GeoPos { 43.28870169558679, -0.4012124625167549 },
+        QGV::GeoPos { 43.288837520817815, -0.40126349922217774 },
+        QGV::GeoPos { 43.289008175284756, -0.40080258793938295 },
+    };
+    ui->geoMap->addItem(new Polyline(linePoints, Qt::GlobalColor::red));
+    ui->geoMap->addItem(new Placemark(QGV::GeoPos(43.28885725761855, -0.40090465730287766)));
 }
 
 void MainWindow::stopCurrent()
