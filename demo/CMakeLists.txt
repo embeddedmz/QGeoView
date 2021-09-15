@@ -1,3 +1,14 @@
+# To disable command line prompt under Windows
+if(WIN32)
+set(GUI_TYPE WIN32)
+elseif(APPLE)
+# Set some Apple MacOS Specific settings
+set(GUI_TYPE MACOSX_BUNDLE)
+endif()
+
+# Executable icon
+set(APP_ICON_RESOURCE_WINDOWS windowExeIcon.rc)
+
 set(CMAKE_CXX_STANDARD 11)
 
 set(CMAKE_AUTOMOC ON)
@@ -61,7 +72,7 @@ if(BUILD_GDAL_EXAMPLE)
     list(APPEND DEMO_SRCS samples/raster.h)
 endif(BUILD_GDAL_EXAMPLE)
 
-add_executable(qgeoview-demo ${DEMO_SRCS})
+add_executable(qgeoview-demo ${GUI_TYPE} ${DEMO_SRCS} ${APP_ICON_RESOURCE_WINDOWS})
 
 target_link_libraries(qgeoview-demo
     PRIVATE
