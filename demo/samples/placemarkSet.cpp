@@ -616,11 +616,7 @@ void PlacemarkSet::Internals::insertIntoNodeTable(ClusteringNode* node)
     }
 
     // Advance to next level up
-    Q_ASSERT(node != nullptr); // if this assert is not valid, add a pointer check to line 623 below
-    // After reviewing this code
-    // I have doubts, for some cases it's nullptr, especially for the first POI added
-    // How this didn't trigger a crash (sigsegv) when it was used in vtkMap in my previous job ??!!??
-    node = node->parent;
+    node = node->parent; // if it's null level is < 0 and the we will not enter in the while loop
     level--; // OK
 
     // Refinement step: Continue iterating up while
