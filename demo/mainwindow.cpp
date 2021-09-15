@@ -158,6 +158,9 @@ void MainWindow::init()
     };
     ui->geoMap->addItem(new Polyline(linePoints, Qt::GlobalColor::red));
     ui->geoMap->addItem(new Placemark(QGV::GeoPos(43.28885725761855, -0.40090465730287766)));
+
+    // plus tard...
+    //ui->geoMap->addWidget(new QGVWidgetColorBar());
 }
 
 void MainWindow::stopCurrent()

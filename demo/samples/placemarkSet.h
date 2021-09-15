@@ -18,22 +18,25 @@
 
 #pragma once
 
-#include <QGeoView/QGVImage.h>
+#include <QGeoView/QGVDrawItem.h>
 
-class PlacemarkSet : public QGVImage
+#include <QPointer>
+
+class PlacemarkSet : public QGVDrawItem
 {
     Q_OBJECT
 
 public:
-    explicit PlacemarkSet();
+    // we need to access the map geoMap to do some compurations ! provide a non nullptr !
+    explicit PlacemarkSet(QGVMap* geoMap);
     ~PlacemarkSet() override;
 
     void setImage(const QPixmap& img); // default : create a shape with QPainter
     void setClustering(const bool enable); // default false
-    void setClusteringTreeDepth(const size_t depth);      // default 14
-    void setClusterDistance(const size_t distance);  // default 80pixels
+    void setClusteringTreeDepth(size_t depth);      // default 14
+    void setClusterDistance(const size_t distance);  // default 40 pixels
     
-    void RecomputeClusters(); // e.g. updateClusters
+    void recomputeClusters(); // e.g. updateClusters
     
     size_t getNumberOfMarkers() const;
 
@@ -44,22 +47,26 @@ public:
     bool setVisibility(const size_t poiId, const bool visible);
     bool getVisibility(const size_t poiId) const;
 
-    void getClusterChildren(const size_t clusterId,
-                            std::vector<size_t>& childPoiIds,
-                            std::vector<size_t>& childClusterIds);
-
-    void getAllIds(const size_t clusterId, std::vector<size_t>& childPoiIds);
-
     /* debug */
     void printClusterPath(std::ostream& os, const size_t clusterId);
     void dumpAllNodesMap();
+    void setDebug(const bool enable);
+
+    void update();
+
+    // all cluster markers IDs
+    void getAllIds(const size_t clusterId, std::vector<size_t>& childPoiIds);
 
 private:
     Q_DISABLE_COPY(PlacemarkSet)
 
-    QTransform projTransform() const override;
-    void projOnFlags() override;
+    void onProjection(QGVMap* geoMap) override;
+    QPainterPath projShape() const override;
+    void projPaint(QPainter* painter) override;
+    QString projTooltip(const QPointF& projPos) const override;
 
     struct Internals;
     Internals* mInternals;
+
+    QPointer<QGVMap> mGeoMap; // need a pointer to the map
 };
