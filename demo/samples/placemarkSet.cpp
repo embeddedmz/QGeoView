@@ -646,7 +646,7 @@ void PlacemarkSet::Internals::insertIntoNodeTable(ClusteringNode* node)
             }
         }
 
-        // Update coordinates? <== is thi still relevant ?
+        // Update coordinates? <== is this still relevant ? already done in mergeNodes IMHO
 
         // Update count
         int numMarkers = 0;
