@@ -48,7 +48,6 @@ private:
     void onItemDoubleClick();
     void onItemStarted(DemoItem* item);
     void onItemEnded(DemoItem* item);
-    void hideEvent(QHideEvent* event);
 
 private:
     Ui::MainWindow* ui;

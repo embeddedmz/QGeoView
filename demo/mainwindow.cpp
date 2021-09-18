@@ -28,12 +28,15 @@
 
 #include "samples/polyline.h"
 #include "samples/placemark.h"
+#include "samples/placemarkSet.h"
 #include "samples/raster.h"
 
 #include <QAction>
 #include <QClipboard>
 #include <QDir>
 #include <QGeoView/QGVDrawItem.h>
+#include <QPainter>
+#include <QPixmap>
 
 MainWindow::MainWindow()
     : ui(new Ui::MainWindow)
@@ -161,6 +164,33 @@ void MainWindow::init()
 
     // plus tard...
     //ui->geoMap->addWidget(new QGVWidgetColorBar());
+
+    /* QString url = R"(C:/Users/Me/Desktop/image.png)";
+    QPixmap img(url);*/
+    QPixmap pix(64, 64);
+    QPainter paint(&pix);
+    QPolygon triangle = QVector<QPoint>{ QPoint{ 0, 63 }, QPoint{ 32, 0 }, QPoint{ 63, 63 } };
+    paint.setPen(QPen(QBrush(Qt::GlobalColor::blue),
+                         1,
+                         Qt::PenStyle::SolidLine,
+                         Qt::PenCapStyle::RoundCap,
+                         Qt::PenJoinStyle::RoundJoin));
+    paint.setBrush(QBrush(Qt::GlobalColor::blue));
+    paint.drawPolygon(triangle, Qt::WindingFill);
+    paint.end();
+
+    PlacemarkSet* myPOIs = new PlacemarkSet(ui->geoMap);
+    myPOIs->setClustering(true);
+    myPOIs->setClusteringTreeDepth(20);
+    //myPOIs->setClustering(false);
+    myPOIs->setImage(pix);
+    //myPOIs->add(QGV::GeoPos{ 0, 0 });
+    myPOIs->add(QGV::GeoPos{ 43.28849853885284, -0.40097961338582416 });
+    myPOIs->add(QGV::GeoPos{ 43.288607663101814, -0.4011056068729572 });
+    myPOIs->add(QGV::GeoPos{ 43.28870169558679, -0.4012124625167549 });
+    myPOIs->add(QGV::GeoPos{ 43.288837520817815, -0.40126349922217774 });
+    myPOIs->add(QGV::GeoPos{ 43.289008175284756, -0.40080258793938295 });
+    ui->geoMap->addItem(myPOIs);
 }
 
 void MainWindow::stopCurrent()
@@ -189,9 +219,4 @@ void MainWindow::onItemStarted(DemoItem* item)
 void MainWindow::onItemEnded(DemoItem* /*item*/)
 {
     stopCurrent();
-}
-
-void MainWindow::hideEvent(QHideEvent* /*event*/)
-{
-    QApplication::quit();
 }

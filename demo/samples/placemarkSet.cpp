@@ -21,6 +21,7 @@
 #include <QBrush>
 #include <QPainter>
 #include <QPen>
+#include <QtMath>
 
 #include <cmath>
 #include <iomanip>
@@ -31,6 +32,13 @@
 namespace
 {
     const auto SQRT_TWO = std::sqrt(2.0);
+
+    int scaleToZoom(double scale)
+    {
+        const double scaleChange = 1 / scale;
+        const int newZoom = qRound((17.0 - qLn(scaleChange) * M_LOG2E));
+        return newZoom;
+    }
 }
 
 // Internal class for cluster tree nodes
@@ -47,6 +55,12 @@ struct ClusteringNode
     size_t markerId;        // only relevant for single-point markers (not clusters)
     size_t numberOfVisibleMarkers;
     size_t numberOfSelectedMarkers;
+};
+
+struct ClusterDrawingInformations
+{
+    QPointF postion;
+    size_t poiCount = 0;
 };
 
 struct PlacemarkSet::Internals
@@ -104,10 +118,11 @@ struct PlacemarkSet::Internals
     // contains only markers !
     std::unordered_map<size_t, ClusteringNode*> MarkerNodesMap;
 
-    QVector<QGV::GeoPos> mPointsGeoPosList;
+    // Use for drawing
+    //QVector<QGV::GeoPos> mPointsGeoPosList;
     QPolygonF mProjPoints;
-
-    QColor mColor; // à enlever
+    QPolygonF mProjClustersPolygon;
+    std::vector<ClusterDrawingInformations> mProjClusters;
 
     bool Debug;
 };
@@ -143,7 +158,7 @@ PlacemarkSet::~PlacemarkSet()
 
 void PlacemarkSet::setImage(const QPixmap& img)
 {
-
+    mInternals->MarkerShape = img;
 }
 
 void PlacemarkSet::setClustering(const bool enable)
@@ -199,7 +214,6 @@ size_t PlacemarkSet::add(const QGV::GeoPos& pos)
     node->nodeId = nodeId;
     node->level = level;
     
-    // We must do it now and we can't wait to do it in void PlacemarkSet::onProjection(QGVMap* geoMap)
     node->geoCoords = pos;
     // Ask Andrey if this is correct :
     node->gcsCoords = mGeoMap->getProjection()->geoToProj(pos);
@@ -961,31 +975,49 @@ void PlacemarkSet::onProjection(QGVMap* geoMap)
 {
     QGVDrawItem::onProjection(geoMap);
 
-    if (!mInternals->mPointsGeoPosList.isEmpty()) {
+    // already done elsewhere when adding POIs to this set
+    /* if (!mInternals->mPointsGeoPosList.isEmpty()) {
         mInternals->mProjPoints.resize(mInternals->mPointsGeoPosList.size());
         for (int i = 0; i < mInternals->mPointsGeoPosList.size(); ++i) {
             mInternals->mProjPoints[i] = geoMap->getProjection()->geoToProj(mInternals->mPointsGeoPosList[i]);
         }
-    }
+    }*/
 }
 
 // TODO...
 QPainterPath PlacemarkSet::projShape() const
 {
+    update();
+
     QPainterPath path;
-    path.addPolygon(mInternals->mProjPoints); // TODO....
+    path.addPolygon(mInternals->mProjPoints);
+    path.addPolygon(mInternals->mProjClustersPolygon);
     return path;
 }
 
 // TODO...
 void PlacemarkSet::projPaint(QPainter* painter)
 {
-    painter->setPen(QPen(QBrush(mInternals->mColor), 1, Qt::PenStyle::SolidLine,
-        Qt::PenCapStyle::RoundCap, Qt::PenJoinStyle::RoundJoin));
+    QBrush brush(Qt::GlobalColor::green);
+    painter->setPen(QPen(brush, 1, Qt::PenStyle::SolidLine, Qt::PenCapStyle::RoundCap, Qt::PenJoinStyle::RoundJoin));
+    painter->setBrush(QBrush(brush));
 
-    // draw geojson points
-    if (!mInternals->mProjPoints.isEmpty()) {
-        painter->drawPoints(mInternals->mProjPoints);
+    // draw POIs
+    for (const auto& poi : mInternals->mProjPoints)
+    {
+        painter->drawPixmap(poi, mInternals->MarkerShape);
+    }
+
+    // draw clusters
+    for (const auto& clusterInfos : mInternals->mProjClusters)
+    {
+        painter->drawEllipse(clusterInfos.postion, 64, 64);
+        
+        const QString strPoiCount = QString::number(clusterInfos.poiCount);
+        painter->setFont(QFont("Times", 10, QFont::Bold));
+        QFontMetrics fm(painter->font());
+        const int poiCountPixelSize = fm.width(strPoiCount);
+        painter->drawText(clusterInfos.postion.x() - poiCountPixelSize / 2, clusterInfos.postion.y(), strPoiCount);
     }
 }
 
@@ -1047,13 +1079,16 @@ void PlacemarkSet::getAllIds(const size_t clusterId, std::vector<size_t>& childP
     mInternals->getMarkerIdsRecursive(clusterId, childPoiIds);
 }
 
-void PlacemarkSet::update()
+void PlacemarkSet::update() const
 {
     // 1. Get zoom level (0 based), clamp it if necessary
     // Clip zoom level to size of cluster table
-    int zoomLevel = 0; /* = this->Layer->GetMap()->GetZoom() * / ; // TODO : get current zoom level
-    if (zoomLevel >= int(this->Internals->NodeTable.size())) {
-        zoomLevel = int(this->Internals->NodeTable.size()) - 1;
+    int zoomLevel = scaleToZoom(mGeoMap->getCamera().scale()) - 1;
+
+    Q_ASSERT(zoomLevel >= 0);
+    // clamp
+    if (zoomLevel >= int(mInternals->NodeTable.size())) {
+        zoomLevel = int(mInternals->NodeTable.size()) - 1;
     }
 
     // 2. Only need to rebuild geometrical data if either
@@ -1086,32 +1121,42 @@ void PlacemarkSet::update()
     //const double b = 4.0 * k - 4.0;
 
     mInternals->CurrentNodes.clear();
+    mInternals->mProjPoints.clear();
+    mInternals->mProjClusters.clear();
 
     std::set<ClusteringNode*>& nodeSet = mInternals->NodeTable[size_t(zoomLevel)];
     std::set<ClusteringNode*>::const_iterator iter;
-    for (iter = nodeSet.cbegin(); iter != nodeSet.cend(); iter++) {
+    for (iter = nodeSet.cbegin(); iter != nodeSet.cend(); iter++)
+    {
         ClusteringNode* const node = *iter;
-        if (!node->numberOfVisibleMarkers) {
+        if (!node->numberOfVisibleMarkers)
+        {
             continue;
         }
 
         // Insert point
         //double z = node->gcsCoords[2] + (node->NumberOfSelectedMarkers ? this->SelectedZOffset : 0.0);
         // points->InsertNextPoint(node->gcsCoords[0], node->gcsCoords[1], z);
-        mInternals->mProjPoints.push_back(node->gcsCoords);
-
         mInternals->CurrentNodes.push_back(node);
 
         if (node->numberOfMarkers == 1)
         {
+            mInternals->mProjPoints.push_back(node->gcsCoords);
+
             /* types->InsertNextValue(MARKER_TYPE);
             const auto map = this->Layer->GetMap();
             const double adjustedMarkerSize = map->GetDevicePixelRatio() * int(this->PointMarkerSize);
             const double markerScale = adjustedMarkerSize / this->BaseMarkerSize;
             scales->InsertNextValue(markerScale);*/
         }
-        else
+        else if (mInternals->Clustering)
         {
+            ClusterDrawingInformations cdi;
+            cdi.poiCount = node->numberOfMarkers;
+            cdi.postion = node->gcsCoords;
+            mInternals->mProjClusters.push_back(cdi);
+            mInternals->mProjClustersPolygon.push_back(cdi.postion);
+
             /*types->InsertNextValue(CLUSTER_TYPE);
             switch (this->ClusterMarkerSizeMode) {
                 case POINTS_CONTAINED: {

@@ -52,8 +52,6 @@ public:
     void dumpAllNodesMap();
     void setDebug(const bool enable);
 
-    void update();
-
     // all cluster markers IDs
     void getAllIds(const size_t clusterId, std::vector<size_t>& childPoiIds);
 
@@ -64,6 +62,8 @@ private:
     QPainterPath projShape() const override;
     void projPaint(QPainter* painter) override;
     QString projTooltip(const QPointF& projPos) const override;
+
+    void update() const;
 
     struct Internals;
     Internals* mInternals;
