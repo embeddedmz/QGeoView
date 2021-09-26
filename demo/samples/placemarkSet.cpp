@@ -65,15 +65,16 @@ struct ClusterDrawingInformations
 
 struct PlacemarkSet::Internals
 {
+    Internals(QGVMap* map)
+        : gvMap(map)
+    {
+    }
+
     // Used when rebuilding clustering tree
     void insertIntoNodeTable(ClusteringNode* node);
 
-    // Computes squared clustering distance in gcs coordinates
-    double computeDistanceThresholdSquared(const QGV::GeoPos& geoPos, const size_t clusteringDistance);
-
     // Find closest node within distance threshold squared
-    ClusteringNode* findClosestNode(ClusteringNode* node, const int zoomLevel,
-        const double distanceThreshold2);
+    ClusteringNode* findClosestNode(ClusteringNode* node, const int zoomLevel);
     void mergeNodes(ClusteringNode* node, ClusteringNode* mergingNode,
                     std::set<ClusteringNode*>& parentsToMerge, const int level);
 
@@ -125,10 +126,12 @@ struct PlacemarkSet::Internals
     std::vector<ClusterDrawingInformations> mProjClusters;
 
     bool Debug;
+
+    QPointer<QGVMap> gvMap;
 };
 
 PlacemarkSet::PlacemarkSet(QGVMap* geoMap)
-    : mInternals(new PlacemarkSet::Internals)
+    : mInternals(new PlacemarkSet::Internals(geoMap))
     , mGeoMap(geoMap)
 {
     Q_ASSERT(geoMap != nullptr);
@@ -568,14 +571,10 @@ void PlacemarkSet::setDebug(const bool enable)
 // Used when rebuilding clustering tree
 void PlacemarkSet::Internals::insertIntoNodeTable(ClusteringNode* node)
 {
-    // squared distance (in degrees squared) - can be optimized for QGeoView (computed once when ClusterDistance
-    // is updated).
-    double threshold2 = computeDistanceThresholdSquared(node->geoCoords, ClusterDistance);
-
     int level = node->level - 1;
     for (; level >= 0; level--)
     {
-        ClusteringNode* closest = findClosestNode(node, level, threshold2);
+        ClusteringNode* closest = findClosestNode(node, level);
         if (closest)
         {
             // Todo Update closest node with marker info <== is this still relevant, I don't think so
@@ -689,7 +688,7 @@ void PlacemarkSet::Internals::insertIntoNodeTable(ClusteringNode* node)
         node->gcsCoords.setY(numerator[1] / numMarkers);
 
         // Check for new clustering partner
-        ClusteringNode* closest = findClosestNode(node, level, threshold2);
+        ClusteringNode* closest = findClosestNode(node, level);
         if (closest)
         {
             mergeNodes(node, closest, parentsToMerge, level);
@@ -704,152 +703,11 @@ void PlacemarkSet::Internals::insertIntoNodeTable(ClusteringNode* node)
     }
 }
 
-// Computes squared clustering distance in gcs (QGraphicsView) coordinates
-double PlacemarkSet::Internals::computeDistanceThresholdSquared(const QGV::GeoPos& geoPos,
-    const size_t clusteringDistance)
-{
-    // VTK :
-    // For orthographic projection, the scaling is trivial.
-    // At level 0, world coordinates range is 360.0
-    // At level 0, map tile is 256 pixels.
-    // Convert clusteringDistance to that scale:
-
-    // For QGeoView I think this is the case !
-    double scale = 360.0 * clusteringDistance / 256.0;
-    return scale * scale;
-
-    // remove the code below !
-#if 0
-    // VTK:
-    // Perspective Projection :
-
-    // Get display coordinates for input point
-    double inputLatLonCoords[2] = { geoPos.latitude(), geoPos.longitude() }; // geoPos
-    double inputDisplayCoords[3]; // pixels !
-    //this->Layer->GetMap()->ComputeDisplayCoords(inputLatLonCoords, 0.0, inputDisplayCoords);
-    
-    // As you can see, ComputeDisplayCoords converts geoPos to Web Mercator position
-    // then it converts this last to the current display screen coordinates (pixels)
-    /* void vtkMap::ComputeDisplayCoords(
-            double latLngCoords[2] <= geoPos, double elevation <= 0, double displayCoords[3])
-    {
-        // x and y and 3D space coords !!!
-        double x = latLngCoords[1];
-        double y = vtkMercator::lat2y(latLngCoords[0]);
-        this->Renderer->SetWorldPoint(x, y, elevation, 1.0);
-        this->Renderer->WorldToDisplay();
-        this->Renderer->GetDisplayPoint(displayCoords);
-        // displayCoords will contain x and y coords in screen 2D space !
-        // (in VTK there's a camera that captures a portion of the space)
-    }*/
-
-    // Offset the display coords by clustering distance
-    double delta = clusteringDistance * SQRT_TWO / 2.0; // why divide by 2.0 ?
-    double secondDisplayCoords[2] = { inputDisplayCoords[0] + delta, inputDisplayCoords[1] + delta };
-
-    // Convert 2nd display coords to lat-lon
-    double secondLatLonCoords[3] = { 0.0, 0.0, 0.0 };
-    //this->Layer->GetMap()->ComputeLatLngCoords(secondDisplayCoords, 0.0, secondLatLonCoords);
-    /*
-    void vtkMap::ComputeLatLngCoords(double displayCoords[2],
-      double elevation,
-      double latLngCoords[3])
-    {
-      // Compute GCS coordinates
-      double worldCoords[3] = { 0.0, 0.0, 0.0 };
-      this->ComputeWorldCoords(displayCoords, elevation, worldCoords);
-
-      // Convert to lat-lon
-      double latitude = vtkMercator::y2lat(worldCoords[1]);
-      double longitude = worldCoords[0];
-
-      // Clip to "valid" coords
-      latLngCoords[0] = vtkMercator::validLatitude(latitude);
-      latLngCoords[1] = vtkMercator::validLongitude(longitude);
-      latLngCoords[2] = elevation;
-    }
-
-    void vtkMap::ComputeWorldCoords(double displayCoords[2],
-  double z,
-  double worldCoords[3])
-{
-  // Get renderer's DisplayToWorld point
-  double rendererCoords[4] = { 0.0, 0.0, 0.0, 1.0 };
-  this->Renderer->SetDisplayPoint(displayCoords[0], displayCoords[1], 0.0);
-  this->Renderer->DisplayToWorld();
-  this->Renderer->GetWorldPoint(rendererCoords);
-  if (rendererCoords[3] != 0.0)
-  {
-    rendererCoords[0] /= rendererCoords[3];
-    rendererCoords[1] /= rendererCoords[3];
-    rendererCoords[2] /= rendererCoords[3];
-  }
-
-  if (this->PerspectiveProjection)
-  {
-    // Project to z
-
-    // Get camera point
-    double cameraCoords[3];
-    vtkCamera* camera = this->Renderer->GetActiveCamera();
-    camera->GetPosition(cameraCoords);
-
-    // Compute line-of-sight vector from camera to renderer point
-    double losVector[3];
-    vtkMath::Subtract(rendererCoords, cameraCoords, losVector);
-
-    // Set magnitude of vector's z coordinate to 1.0
-    vtkMath::MultiplyScalar(losVector, fabs(1.0 / losVector[2]));
-
-    // Project line-of-sight vector from camera to specified z
-    double deltaZ = cameraCoords[2] - z;
-    vtkMath::MultiplyScalar(losVector, deltaZ);
-    worldCoords[0] = cameraCoords[0] + losVector[0];
-    worldCoords[1] = cameraCoords[1] + losVector[1];
-    worldCoords[2] = z;
-  }
-  else
-  {
-    worldCoords[0] = rendererCoords[0];
-    worldCoords[1] = rendererCoords[1];
-    worldCoords[2] = z;
-  }
-}
-    */
-
-    // Convert both points to world coords
-    double inputWorldCoords[3] = { inputLatLonCoords[1], vtkMercator::lat2y(inputLatLonCoords[0]), 0.0 };
-    double secondWorldCoords[3] = { secondLatLonCoords[1], vtkMercator::lat2y(secondLatLonCoords[0]), 0.0 };
-
-    // Return value is the distance squared
-    double threshold2 = vtkMath::Distance2BetweenPoints(inputWorldCoords, secondWorldCoords);
-    // Use QT : QLineF( pos1, pos2 ).length().
-
-    // Need to adjust by current zoom level
-    int zoomLevel = this->Layer->GetMap()->GetZoom();
-    double scale = static_cast<double>(1 << zoomLevel);
-    threshold2 *= (scale * scale);
-
-    return threshold2;
-#endif
-}
-
 // Find closest node within distance threshold squared
-ClusteringNode* PlacemarkSet::Internals::findClosestNode(ClusteringNode* node,
-    const int zoomLevel,
-    const double distanceThreshold2)
+ClusteringNode* PlacemarkSet::Internals::findClosestNode(ClusteringNode* node, const int zoomLevel)
 {
-    // I didn't understand these comments from vtkMap, I think it's BS.
-    // Convert distanceThreshold from image to gcs coords
-    // double level0Scale = 360.0 / 256.0;  // 360 degress <==> 256 tile pixels
-    // double scale = level0Scale / static_cast<double>(1<<zoomLevel);
-    // double gcsThreshold = scale * distanceThreshold;
-    // double gcsThreshold2 = gcsThreshold * gcsThreshold;
-    double scale = static_cast<double>(1 << zoomLevel);
-    double gcsThreshold2 = distanceThreshold2 / scale / scale;
-
     ClusteringNode* closestNode = nullptr;
-    double closestDistance2 = gcsThreshold2;
+    double closestDistance2 = ClusterDistance;
     std::set<ClusteringNode*>& nodeSet = NodeTable[zoomLevel];
     std::set<ClusteringNode*>::const_iterator setIter = nodeSet.cbegin();
     for (; setIter != nodeSet.cend(); setIter++)
@@ -865,7 +723,8 @@ ClusteringNode* PlacemarkSet::Internals::findClosestNode(ClusteringNode* node,
         d2 += d1 * d1;
         d1 = other->gcsCoords.y() - node->gcsCoords.y();
         d2 += d1 * d1;
-        if (d2 < closestDistance2)
+        d2 *= gvMap->getCamera().scale();
+        if (d2 <= closestDistance2)
         {
             closestNode = other;
             closestDistance2 = d2;
