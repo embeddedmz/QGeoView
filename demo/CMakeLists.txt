@@ -62,6 +62,10 @@ set(DEMO_SRCS
     samples/polyline.h
 	samples/placemarkSet.cpp
 	samples/placemarkSet.h
+    samples/placemarkCluster.cpp
+    samples/placemarkCluster.h
+    samples/placemarkSetLayer.cpp
+	samples/placemarkSetLayer.h
 )
 
 if(BUILD_GDAL_EXAMPLE)
