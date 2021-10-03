@@ -28,7 +28,7 @@
 
 #include "samples/polyline.h"
 #include "samples/placemark.h"
-#include "samples/placemarkSet.h"
+#include "samples/placemarkSetLayer.h"
 #include "samples/raster.h"
 
 #include <QAction>
@@ -179,7 +179,7 @@ void MainWindow::init()
     paint.drawPolygon(triangle, Qt::WindingFill);
     paint.end();
 
-    PlacemarkSet* myPOIs = new PlacemarkSet(ui->geoMap);
+    PlacemarkSetLayer* myPOIs = new PlacemarkSetLayer(ui->geoMap);
     myPOIs->setClustering(true);
     myPOIs->setClusteringTreeDepth(20);
     //myPOIs->setClustering(false);

@@ -27,8 +27,7 @@ class PlacemarkSetLayer : public QGVDrawItem
     Q_OBJECT
 
 public:
-    // we need to access the map geoMap to do some compurations ! provide a non nullptr !
-    explicit PlacemarkSetLayer(QGVMap* geoMap);
+    explicit PlacemarkSetLayer();
     ~PlacemarkSetLayer() override;
 
     void setImage(const QPixmap& img); // default : create a shape with QPainter
@@ -57,16 +56,13 @@ public:
 
 private:
     Q_DISABLE_COPY(PlacemarkSetLayer)
-
     void onProjection(QGVMap* geoMap) override;
-    QPainterPath projShape() const override;
-    void projPaint(QPainter* painter) override;
-    QString projTooltip(const QPointF& projPos) const override;
+    void onCamera(const QGVCameraState& oldState, const QGVCameraState& newState) override;
+    void onUpdate() override;
+    void onClean() override;
 
     void update() const;
 
     struct Internals;
     Internals* mInternals;
-
-    QPointer<QGVMap> mGeoMap; // need a pointer to the map
 };

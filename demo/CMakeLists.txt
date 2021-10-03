@@ -60,12 +60,12 @@ set(DEMO_SRCS
     samples/mytile.h
 	samples/polyline.cpp
     samples/polyline.h
-	samples/placemarkSet.cpp
-	samples/placemarkSet.h
     samples/placemarkCluster.cpp
     samples/placemarkCluster.h
     samples/placemarkSetLayer.cpp
 	samples/placemarkSetLayer.h
+	samples/placemarkPixmap.cpp
+	samples/placemarkPixmap.h
 )
 
 if(BUILD_GDAL_EXAMPLE)

@@ -22,74 +22,75 @@
 #include <QPainter>
 #include <QPen>
 
-placemarkCluster::placemarkCluster(const QGV::GeoRect& geoRect, QGV::ItemFlags flags, QColor color)
-    : mGeoRect(geoRect)
-    , mColor(color)
+struct PlacemarkCluster::Internals
 {
-    setFlags(flags);
-    setSelectable(true);
+    PlacemarkCluster::Internals(const QGV::GeoPos& geoPos, const QPointF& mapPos, const size_t count)
+        : clusterGeoPos(geoPos), clusterMapPos(mapPos), count(count)
+    {
+    }
+
+    const QGV::GeoPos clusterGeoPos;
+    const QPointF clusterMapPos;
+    const size_t count;
+};
+
+PlacemarkCluster::PlacemarkCluster(const QGV::GeoPos& geoPos, const QPointF& mapPos, const size_t count)
+    : mInternals(new PlacemarkCluster::Internals(geoPos, mapPos, count))
+{
+    setSelectable(false); // true: plus tard
 }
 
-void placemarkCluster::onProjection(QGVMap* geoMap)
+PlacemarkCluster::~PlacemarkCluster()
+{
+    delete mInternals;
+}
+
+/*
+// already done by the layer and stored in mInternals->clusterMapPos
+void PlacemarkCluster::onProjection(QGVMap* geoMap)
 {
     QGVDrawItem::onProjection(geoMap);
-    mProjRect = geoMap->getProjection()->geoToProj(mGeoRect);
-}
+    mInternals->clusterMapPos = geoMap->getProjection()->geoToProj(mInternals->clusterGeoPos);
+}*/
 
-void placemarkCluster::onUpdate()
-{
-    QGVDrawItem::onUpdate();
-}
-
-QPainterPath placemarkCluster::projShape() const
+QPainterPath PlacemarkCluster::projShape() const
 {
     QPainterPath path;
-    path.addRect(mProjRect);
+    path.addRect(QRectF(mInternals->clusterMapPos.x() - 32,
+        mInternals->clusterMapPos.y() - 32, 64, 64));
     return path;
 }
 
-void placemarkCluster::projPaint(QPainter* painter)
+void PlacemarkCluster::projPaint(QPainter* painter)
 {
-    QPen pen;
-    if (isFlag(QGV::ItemFlag::Highlighted) && isFlag(QGV::ItemFlag::HighlightCustom)) {
-        pen = QPen(QBrush(Qt::black), 5);
-    } else {
-        pen = QPen(QBrush(Qt::black), 1);
-    }
-    pen.setCosmetic(true);
-    painter->setPen(pen);
-    painter->setBrush(QBrush(mColor));
-    painter->drawRect(mProjRect);
-    if (isSelected() && isFlag(QGV::ItemFlag::SelectCustom)) {
-        painter->drawLine(mProjRect.topLeft(), mProjRect.bottomRight());
-        painter->drawLine(mProjRect.topRight(), mProjRect.bottomLeft());
-    }
+    QBrush brush(Qt::GlobalColor::green);
+    painter->setPen(QPen(brush, 1, Qt::PenStyle::SolidLine, Qt::PenCapStyle::RoundCap, Qt::PenJoinStyle::RoundJoin));
+    painter->setBrush(QBrush(brush));
+    painter->drawEllipse(mInternals->clusterMapPos, 32, 32);
+
+    const QString strPoiCount = QString::number(mInternals->count);
+    painter->setFont(QFont("Times", 10, QFont::Bold));
+    QFontMetrics fm(painter->font());
+    const int poiCountPixelSize = fm.width(strPoiCount);
+    painter->drawText(mInternals->clusterMapPos.x() - poiCountPixelSize / 2,
+        mInternals->clusterMapPos.y(), strPoiCount);
 }
 
-QPointF placemarkCluster::projAnchor() const
-{
-    return mProjRect.center();
-}
-
-QTransform placemarkCluster::projTransform() const
-{
-    return QGV::createTransfromAzimuth(projAnchor(), 45);
-}
-
-QString placemarkCluster::projTooltip(const QPointF& projPos) const
+QString PlacemarkCluster::projTooltip(const QPointF& projPos) const
 {
     auto geo = getMap()->getProjection()->projToGeo(projPos);
-    return "Rectangle with color " + mColor.name() + "\nPosition " + geo.latToString() + " " + geo.lonToString();
+    return "Cluster of " + QString::number(mInternals->count) + " markers.\nPosition " +
+        geo.latToString() + " " + geo.lonToString();
 }
 
-void placemarkCluster::projOnMouseClick(const QPointF& projPos)
+void PlacemarkCluster::projOnMouseClick(const QPointF& projPos)
 {
     setOpacity(qMax(0.2, getOpacity() - 0.2));
-    qInfo() << "single click" << projPos;
+    qInfo() << "single click on a cluster" << projPos;
 }
 
-void placemarkCluster::projOnMouseDoubleClick(const QPointF& projPos)
+void PlacemarkCluster::projOnMouseDoubleClick(const QPointF& projPos)
 {
     setOpacity(1.0);
-    qInfo() << "double click" << projPos;
+    qInfo() << "double click on a cluster" << projPos;
 }

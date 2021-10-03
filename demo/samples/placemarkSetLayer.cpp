@@ -65,11 +65,6 @@ struct ClusterDrawingInformations
 
 struct PlacemarkSetLayer::Internals
 {
-    Internals(QGVMap* map)
-        : gvMap(map)
-    {
-    }
-
     // Used when rebuilding clustering tree
     void insertIntoNodeTable(ClusteringNode* node);
 
@@ -126,16 +121,11 @@ struct PlacemarkSetLayer::Internals
     std::vector<ClusterDrawingInformations> mProjClusters;
 
     bool Debug;
-
-    QPointer<QGVMap> gvMap;
 };
 
-PlacemarkSetLayer::PlacemarkSetLayer(QGVMap* geoMap)
-    : mInternals(new PlacemarkSetLayer::Internals(geoMap))
-    , mGeoMap(geoMap)
+PlacemarkSetLayer::PlacemarkSetLayer() :
+    mInternals(new PlacemarkSetLayer::Internals)
 {
-    Q_ASSERT(geoMap != nullptr);
-
     setSelectable(false);
 
     //mPointsGeoPosList.push_back(QGV::GeoPos(coordinates.at(1).toDouble(), coordinates.at(0).toDouble()));

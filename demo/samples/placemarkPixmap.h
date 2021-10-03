@@ -20,16 +20,16 @@
 
 #include <QGeoView/QGVDrawItem.h>
 
-class PlacemarkCluster : public QGVDrawItem
+class PlacemarkPixmap : public QGVDrawItem
 {
     Q_OBJECT
 public:
-    explicit PlacemarkCluster(const QGV::GeoPos& geoPos, const QPointF& mapPos, const size_t count);
-    ~PlacemarkCluster() override;
+    explicit PlacemarkPixmap(const QGV::GeoPos& geoPos, const QPointF& mapPos, const QPixmap& pixmap);
+    ~PlacemarkPixmap() override;
 
 private:
-    Q_DISABLE_COPY(PlacemarkCluster)
-    //void onProjection(QGVMap* geoMap) override;
+    Q_DISABLE_COPY(PlacemarkPixmap)
+    // void onProjection(QGVMap* geoMap) override;
     QPainterPath projShape() const override;
     void projPaint(QPainter* painter) override;
     QString projTooltip(const QPointF& projPos) const override;
