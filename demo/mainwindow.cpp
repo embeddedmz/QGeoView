@@ -179,7 +179,10 @@ void MainWindow::init()
     paint.drawPolygon(triangle, Qt::WindingFill);
     paint.end();
 
-    PlacemarkSetLayer* myPOIs = new PlacemarkSetLayer(ui->geoMap);
+    PlacemarkSetLayer* myPOIs = new PlacemarkSetLayer();
+    // faudra le faire avant d'ajouter les POIs ou bien il faudra passer la geomap au ctor
+    // ou bien changer l'archi de la couche
+    ui->geoMap->addItem(myPOIs);
     myPOIs->setClustering(true);
     myPOIs->setClusteringTreeDepth(20);
     //myPOIs->setClustering(false);
@@ -190,7 +193,6 @@ void MainWindow::init()
     myPOIs->add(QGV::GeoPos{ 43.28870169558679, -0.4012124625167549 });
     myPOIs->add(QGV::GeoPos{ 43.288837520817815, -0.40126349922217774 });
     myPOIs->add(QGV::GeoPos{ 43.289008175284756, -0.40080258793938295 });
-    ui->geoMap->addItem(myPOIs);
 }
 
 void MainWindow::stopCurrent()

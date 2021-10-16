@@ -18,11 +18,11 @@
 
 #pragma once
 
-#include <QGeoView/QGVDrawItem.h>
+#include <QGeoView/QGVLayer.h>
 
 #include <QPointer>
 
-class PlacemarkSetLayer : public QGVDrawItem
+class PlacemarkSetLayer : public QGVLayer
 {
     Q_OBJECT
 
@@ -61,7 +61,7 @@ private:
     void onUpdate() override;
     void onClean() override;
 
-    void update() const;
+    void processCamera();
 
     struct Internals;
     Internals* mInternals;

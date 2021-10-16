@@ -19,6 +19,7 @@
 #include "placemarkSetLayer.h"
 
 #include <QBrush>
+#include <QElapsedTimer>
 #include <QPainter>
 #include <QPen>
 #include <QtMath>
@@ -31,6 +32,10 @@
 
 namespace
 {
+    int minMargin = 1;
+    int maxMargin = 3;
+    int msAnimationUpdateDelay = 250;
+    
     const auto SQRT_TWO = std::sqrt(2.0);
 
     int scaleToZoom(double scale)
@@ -65,6 +70,12 @@ struct ClusterDrawingInformations
 
 struct PlacemarkSetLayer::Internals
 {
+    Internals(PlacemarkSetLayer* owner)
+        : mOwner(owner)
+    {
+
+    }
+
     // Used when rebuilding clustering tree
     void insertIntoNodeTable(ClusteringNode* node);
 
@@ -83,7 +94,7 @@ struct PlacemarkSetLayer::Internals
 
     bool Clustering;
     
-    size_t ClusteringTreeDepth;
+    int ClusteringTreeDepth;
     
     size_t ClusterDistance;
 
@@ -121,10 +132,16 @@ struct PlacemarkSetLayer::Internals
     std::vector<ClusterDrawingInformations> mProjClusters;
 
     bool Debug;
+
+    QElapsedTimer mLastAnimation;
+    int mCurZoom;
+    QRect mCurRect;
+
+    PlacemarkSetLayer* const mOwner;
 };
 
 PlacemarkSetLayer::PlacemarkSetLayer() :
-    mInternals(new PlacemarkSetLayer::Internals)
+    mInternals(new PlacemarkSetLayer::Internals(this))
 {
     setSelectable(false);
 
@@ -209,7 +226,7 @@ size_t PlacemarkSetLayer::add(const QGV::GeoPos& pos)
     
     node->geoCoords = pos;
     // Ask Andrey if this is correct :
-    node->gcsCoords = mGeoMap->getProjection()->geoToProj(pos);
+    node->gcsCoords = getMap()->getProjection()->geoToProj(pos);
     // In VTK we do this :
     /* node->gcsCoords[0] = longitude;
     node->gcsCoords[1] = vtkMercator::lat2y(latitude);*/
@@ -558,358 +575,6 @@ void PlacemarkSetLayer::setDebug(const bool enable)
     mInternals->Debug = enable;
 }
 
-// Used when rebuilding clustering tree
-void PlacemarkSetLayer::Internals::insertIntoNodeTable(ClusteringNode* node)
-{
-    int level = node->level - 1;
-    for (; level >= 0; level--)
-    {
-        ClusteringNode* closest = findClosestNode(node, level);
-        if (closest)
-        {
-            // Todo Update closest node with marker info <== is this still relevant, I don't think so
-            if (Debug)
-                printf("[Debug] Found closest node to '%zu' at '%zu'.\n", node->nodeId, closest->nodeId);
-
-            // add a comment to explain this code (I don't really fully understand it, I know it's cluster position
-            // but why the vtkMap developer chose that algorithm to compute cluster position)
-            double denominator = 1.0 + closest->numberOfMarkers;          
-            double numerator = closest->gcsCoords.x() * closest->numberOfMarkers + node->gcsCoords.x();
-            closest->gcsCoords.setX(numerator / denominator);
-            numerator = closest->gcsCoords.y() * closest->numberOfMarkers + node->gcsCoords.y();
-            closest->gcsCoords.setY(numerator / denominator);
-
-            closest->numberOfMarkers++;
-            closest->numberOfVisibleMarkers++;
-            closest->markerId = (size_t)-1; // it became a cluster, maybe we should change the type of marker to a signed type
-            closest->children.insert(node);
-            node->parent = closest;
-
-            // Insertion step ends with first clustering
-            node = closest;
-            
-            break; // NB: level will not be decreased
-        }
-        else
-        {
-            // Copy node and add to this level (we can make use of a copy assignement operator but we have to think carefully before)
-            ClusteringNode* newNode = new ClusteringNode;
-            const auto newNodeId = UniqueNodeId++;
-            AllNodesMap.emplace(newNodeId, newNode);
-            newNode->nodeId = newNodeId;
-            newNode->level = level;
-            newNode->gcsCoords = node->gcsCoords;
-            newNode->numberOfMarkers = node->numberOfMarkers; // redudant as this info is also contained in newNode->children ?
-            newNode->numberOfVisibleMarkers = node->numberOfVisibleMarkers;
-            newNode->numberOfSelectedMarkers = node->numberOfSelectedMarkers;
-            newNode->markerId = node->markerId;
-            newNode->parent = nullptr;
-            newNode->children.insert(node);
-            NodeTable[size_t(level)].insert(newNode);
-
-            if (Debug)
-                printf("[Debug] Copying node '%zu' to a new one '%zu' for level '%d' \n",
-                       node->nodeId,
-                       newNode->nodeId,
-                       level);
-
-            node->parent = newNode;
-            node = newNode;
-        }
-    }
-
-    // Advance to next level up
-    node = node->parent; // if it's null level is < 0 and the we will not enter in the while loop
-    level--; // OK
-
-    // Refinement step: Continue iterating up while
-    // * Merge any nodes identified in previous iteration
-    // * Update node coordinates
-    // * Check for closest node
-    std::set<ClusteringNode*> nodesToMerge;
-    std::set<ClusteringNode*> parentsToMerge;
-    while (level >= 0)
-    {
-        // Merge nodes identified in previous iteration
-        std::set<ClusteringNode*>::iterator mergingNodeIter = nodesToMerge.begin();
-        for (; mergingNodeIter != nodesToMerge.end(); mergingNodeIter++)
-        {
-            ClusteringNode* mergingNode = *mergingNodeIter;
-            if (node == mergingNode)
-            {
-                printf("[Warning] Node & merging node are the same '%zu'\n", node->nodeId);
-                Q_ASSERT(false);
-            }
-            else
-            {
-                if (Debug)
-                    printf("[Debug] At level '%d', merging node '%p' into '%p'\n", level, mergingNode, node);
-
-                mergeNodes(node, mergingNode, parentsToMerge, level);
-            }
-        }
-
-        // Update coordinates? <== is this still relevant ? already done in mergeNodes IMHO
-
-        // Update count
-        int numMarkers = 0;
-        int numSelectedMarkers = 0;
-        int numVisibleMarkers = 0;
-        double numerator[2];
-        numerator[0] = numerator[1] = 0.0;
-        std::set<ClusteringNode*>::iterator childIter = node->children.begin();
-        for (; childIter != node->children.end(); childIter++) {
-            ClusteringNode* child = *childIter;
-            numMarkers += child->numberOfMarkers;
-            numSelectedMarkers += child->numberOfSelectedMarkers;
-            numVisibleMarkers += child->numberOfVisibleMarkers;
-
-            numerator[0] += child->numberOfMarkers * child->gcsCoords.x();
-            numerator[1] += child->numberOfMarkers * child->gcsCoords.y();
-        }
-        node->numberOfMarkers = numMarkers;
-        node->numberOfSelectedMarkers = numSelectedMarkers;
-        node->numberOfVisibleMarkers = numVisibleMarkers;
-        if (numMarkers > 1)
-        {
-            node->markerId = (size_t)-1;
-        }
-        node->gcsCoords.setX(numerator[0] / numMarkers);
-        node->gcsCoords.setY(numerator[1] / numMarkers);
-
-        // Check for new clustering partner
-        ClusteringNode* closest = findClosestNode(node, level);
-        if (closest)
-        {
-            mergeNodes(node, closest, parentsToMerge, level);
-        }
-
-        // Setup for next iteration
-        nodesToMerge.clear();
-        nodesToMerge = parentsToMerge;
-        parentsToMerge.clear();
-        node = node->parent;
-        level--;
-    }
-}
-
-// Find closest node within distance threshold squared
-ClusteringNode* PlacemarkSetLayer::Internals::findClosestNode(ClusteringNode* node, const int zoomLevel)
-{
-    ClusteringNode* closestNode = nullptr;
-    double closestDistance2 = ClusterDistance;
-    std::set<ClusteringNode*>& nodeSet = NodeTable[zoomLevel];
-    std::set<ClusteringNode*>::const_iterator setIter = nodeSet.cbegin();
-    for (; setIter != nodeSet.cend(); setIter++)
-    {
-        ClusteringNode* other = *setIter;
-        if (other == node)
-        {
-            continue;
-        }
-
-        double d2 = 0.0;
-        double d1 = other->gcsCoords.x() - node->gcsCoords.x();
-        d2 += d1 * d1;
-        d1 = other->gcsCoords.y() - node->gcsCoords.y();
-        d2 += d1 * d1;
-        d2 *= gvMap->getCamera().scale();
-        if (d2 <= closestDistance2)
-        {
-            closestNode = other;
-            closestDistance2 = d2;
-        }
-    }
-
-    return closestNode;
-}
-
-void PlacemarkSetLayer::Internals::mergeNodes(ClusteringNode* node,
-    ClusteringNode* mergingNode,
-    std::set<ClusteringNode*>& parentsToMerge,
-    const int level)
-{
-    if (Debug)
-        printf("[Debug] Merging '%zu' into '%zu'\n", mergingNode->nodeId, node->nodeId);
-
-    if (node->level != mergingNode->level)
-    {
-        printf("[Error] Node '%zu' and node '%zu' are not at the same level\n", node->nodeId, mergingNode->nodeId);
-        Q_ASSERT(false);
-    }
-
-    // Update gcsCoords
-    const size_t numMarkers = node->numberOfMarkers + mergingNode->numberOfMarkers;
-    const double denominator = static_cast<double>(numMarkers);
-
-    double numerator = node->gcsCoords.x() * node->numberOfMarkers +
-        mergingNode->gcsCoords.x() * mergingNode->numberOfMarkers;
-    node->gcsCoords.setX(numerator / denominator);
-    numerator = node->gcsCoords.y() * node->numberOfMarkers +
-        mergingNode->gcsCoords.y() * mergingNode->numberOfMarkers;
-    node->gcsCoords.setY(numerator / denominator);
-
-    node->numberOfMarkers = numMarkers;
-    node->numberOfVisibleMarkers += mergingNode->numberOfVisibleMarkers;
-    node->markerId = -1;
-
-    // Update links to/from children of merging node
-    // Make a working copy of the child set
-    std::set<ClusteringNode*> childNodeSet(mergingNode->children);
-    std::set<ClusteringNode*>::iterator childNodeIter = childNodeSet.begin();
-    for (; childNodeIter != childNodeSet.end(); childNodeIter++) {
-        ClusteringNode* childNode = *childNodeIter;
-        node->children.insert(childNode);
-        childNode->parent = node;
-    }
-
-    // Adjust parent marker counts
-    // Todo recompute from children
-    size_t n = mergingNode->numberOfMarkers;
-    node->parent->numberOfMarkers += n;
-    mergingNode->parent->numberOfMarkers -= n;
-
-    // Remove mergingNode from its parent
-    ClusteringNode* parent = mergingNode->parent;
-    parent->children.erase(mergingNode);
-
-    // Remember parent node if different than node's parent
-    if (mergingNode->parent && mergingNode->parent != node->parent)
-    {
-        parentsToMerge.insert(mergingNode->parent);
-    }
-
-    // Delete mergingNode
-    // todo only delete if valid level specified?
-    auto count = NodeTable[size_t(level)].count(mergingNode);
-    if (count == 1)
-    {
-        NodeTable[size_t(level)].erase(mergingNode);
-    }
-    else
-    {
-        printf("[Error] Node '%zu' not found at level '%d'\n", mergingNode->nodeId, level);
-        Q_ASSERT(false);
-    }
-
-    AllNodesMap.erase(mergingNode->nodeId);
-
-    // todo Check CurrentNodes too?
-    delete mergingNode;
-}
-
-void PlacemarkSetLayer::Internals::getMarkerIdsRecursive(const size_t clusterId, std::vector<size_t>& markerIds)
-{
-    // Get children markers & clusters
-    std::vector<size_t> childMarkerIds;
-    std::vector<size_t> childClusterIds;
-    getClusterChildren(clusterId, childMarkerIds, childClusterIds);
-
-    // Copy marker ids
-    for (size_t i = 0; i < childMarkerIds.size(); i++)
-    {
-        markerIds.push_back(childMarkerIds[i]);
-    }
-
-    // Traverse cluster ids
-    for (size_t j = 0; j < childClusterIds.size(); j++)
-    {
-        size_t childId = childClusterIds[j];
-        getMarkerIdsRecursive(childId, markerIds);
-    }
-}
-
-// TODO
-void PlacemarkSetLayer::onProjection(QGVMap* geoMap)
-{
-    QGVDrawItem::onProjection(geoMap);
-
-    // already done elsewhere when adding POIs to this set
-    /* if (!mInternals->mPointsGeoPosList.isEmpty()) {
-        mInternals->mProjPoints.resize(mInternals->mPointsGeoPosList.size());
-        for (int i = 0; i < mInternals->mPointsGeoPosList.size(); ++i) {
-            mInternals->mProjPoints[i] = geoMap->getProjection()->geoToProj(mInternals->mPointsGeoPosList[i]);
-        }
-    }*/
-}
-
-// TODO...
-QPainterPath PlacemarkSetLayer::projShape() const
-{
-    update();
-
-    QPainterPath path;
-    path.addPolygon(mInternals->mProjPoints);
-    path.addPolygon(mInternals->mProjClustersPolygon);
-    return path;
-}
-
-// TODO...
-void PlacemarkSetLayer::projPaint(QPainter* painter)
-{
-    QBrush brush(Qt::GlobalColor::green);
-    painter->setPen(QPen(brush, 1, Qt::PenStyle::SolidLine, Qt::PenCapStyle::RoundCap, Qt::PenJoinStyle::RoundJoin));
-    painter->setBrush(QBrush(brush));
-
-    // draw POIs
-    for (const auto& poi : mInternals->mProjPoints)
-    {
-        painter->drawPixmap(poi, mInternals->MarkerShape);
-    }
-
-    // draw clusters
-    for (const auto& clusterInfos : mInternals->mProjClusters)
-    {
-        painter->drawEllipse(clusterInfos.postion, 64, 64);
-        
-        const QString strPoiCount = QString::number(clusterInfos.poiCount);
-        painter->setFont(QFont("Times", 10, QFont::Bold));
-        QFontMetrics fm(painter->font());
-        const int poiCountPixelSize = fm.width(strPoiCount);
-        painter->drawText(clusterInfos.postion.x() - poiCountPixelSize / 2, clusterInfos.postion.y(), strPoiCount);
-    }
-}
-
-QString PlacemarkSetLayer::projTooltip(const QPointF& projPos) const
-{
-    auto geo = getMap()->getProjection()->projToGeo(projPos);
-    return QString("Placemarker set\n"
-        "\tClustering: %1\n"
-        "\tClustering distance: %2 pixels\n"
-        "\tNumber of markers : %3")
-            .arg(mInternals->Clustering ? "On" : "Off")
-            .arg(mInternals->ClusterDistance)
-            .arg(mInternals->MarkerNodesMap.size());
-}
-
-void PlacemarkSetLayer::Internals::getClusterChildren(const size_t clusterId,
-                                                 std::vector<size_t>& childPoiIds,
-                                                 std::vector<size_t>& childClusterIds)
-{
-    childPoiIds.clear();
-    childClusterIds.clear();
-
-    if (AllNodesMap.find(clusterId) == AllNodesMap.end()) {
-        return;
-    }
-
-    // Check if node has been deleted, I don't think this is needed.
-    ClusteringNode* node = AllNodesMap[clusterId];
-    if (!node) {
-        return;
-    }
-
-    std::set<ClusteringNode*>::iterator childIter = node->children.begin();
-    for (; childIter != node->children.end(); childIter++) {
-        ClusteringNode* child = *childIter;
-        if (child->numberOfMarkers == 1) {
-            childPoiIds.push_back(child->markerId);
-        } else {
-            childClusterIds.push_back(child->nodeId);
-        } // else
-    }     // for (childIter)
-}
-
 void PlacemarkSetLayer::getAllIds(const size_t clusterId, std::vector<size_t>& childPoiIds)
 {
     childPoiIds.clear();
@@ -928,11 +593,50 @@ void PlacemarkSetLayer::getAllIds(const size_t clusterId, std::vector<size_t>& c
     mInternals->getMarkerIdsRecursive(clusterId, childPoiIds);
 }
 
-void PlacemarkSetLayer::update() const
+void PlacemarkSetLayer::onProjection(QGVMap* geoMap)
 {
+    QGVLayer::onProjection(geoMap);
+    // already done elsewhere when adding POIs to this set
+    /* if (!mInternals->mPointsGeoPosList.isEmpty()) {
+        mInternals->mProjPoints.resize(mInternals->mPointsGeoPosList.size());
+        for (int i = 0; i < mInternals->mPointsGeoPosList.size(); ++i) {
+            mInternals->mProjPoints[i] = geoMap->getProjection()->geoToProj(mInternals->mPointsGeoPosList[i]);
+        }
+    }*/
+}
+
+void PlacemarkSetLayer::onCamera(const QGVCameraState& oldState, const QGVCameraState& newState)
+{
+    QGVLayer::onCamera(oldState, newState);
+    if (oldState == newState) {
+        return;
+    }
+
+    bool needUpdate = true;
+    if (newState.animation()) {
+        if (!mInternals->mLastAnimation.isValid()) {
+            mInternals->mLastAnimation.start();
+        } else if (mInternals->mLastAnimation.elapsed() < msAnimationUpdateDelay) {
+            needUpdate = false;
+        } else {
+            mInternals->mLastAnimation.restart();
+        }
+    } else {
+        mInternals->mLastAnimation.invalidate();
+    }
+    if (needUpdate) {
+        processCamera();
+    }
+}
+
+void PlacemarkSetLayer::onUpdate()
+{
+    QGVLayer::onUpdate();
+    //processCamera(); // todo : mettre tout le code ci-dessous dans processCamera()
+
     // 1. Get zoom level (0 based), clamp it if necessary
     // Clip zoom level to size of cluster table
-    int zoomLevel = scaleToZoom(mGeoMap->getCamera().scale()) - 1;
+    int zoomLevel = scaleToZoom(getMap()->getCamera().scale()) - 1;
 
     Q_ASSERT(zoomLevel >= 0);
     // clamp
@@ -966,8 +670,8 @@ void PlacemarkSetLayer::update() const
     // The equation is y = k*x^2 / (x^2 + b), where k,b are coefficients
     // Logic hard-codes the min cluster factor to 1, i.e., y(2) = 1.0
     // Max value is k, which sets the horizontal asymptote :
-    //const double k = this->MaxClusterScaleFactor;
-    //const double b = 4.0 * k - 4.0;
+    // const double k = this->MaxClusterScaleFactor;
+    // const double b = 4.0 * k - 4.0;
 
     mInternals->CurrentNodes.clear();
     mInternals->mProjPoints.clear();
@@ -975,21 +679,18 @@ void PlacemarkSetLayer::update() const
 
     std::set<ClusteringNode*>& nodeSet = mInternals->NodeTable[size_t(zoomLevel)];
     std::set<ClusteringNode*>::const_iterator iter;
-    for (iter = nodeSet.cbegin(); iter != nodeSet.cend(); iter++)
-    {
+    for (iter = nodeSet.cbegin(); iter != nodeSet.cend(); iter++) {
         ClusteringNode* const node = *iter;
-        if (!node->numberOfVisibleMarkers)
-        {
+        if (!node->numberOfVisibleMarkers) {
             continue;
         }
 
         // Insert point
-        //double z = node->gcsCoords[2] + (node->NumberOfSelectedMarkers ? this->SelectedZOffset : 0.0);
+        // double z = node->gcsCoords[2] + (node->NumberOfSelectedMarkers ? this->SelectedZOffset : 0.0);
         // points->InsertNextPoint(node->gcsCoords[0], node->gcsCoords[1], z);
         mInternals->CurrentNodes.push_back(node);
 
-        if (node->numberOfMarkers == 1)
-        {
+        if (node->numberOfMarkers == 1) {
             mInternals->mProjPoints.push_back(node->gcsCoords);
 
             /* types->InsertNextValue(MARKER_TYPE);
@@ -997,9 +698,7 @@ void PlacemarkSetLayer::update() const
             const double adjustedMarkerSize = map->GetDevicePixelRatio() * int(this->PointMarkerSize);
             const double markerScale = adjustedMarkerSize / this->BaseMarkerSize;
             scales->InsertNextValue(markerScale);*/
-        }
-        else if (mInternals->Clustering)
-        {
+        } else if (mInternals->Clustering) {
             ClusterDrawingInformations cdi;
             cdi.poiCount = node->numberOfMarkers;
             cdi.postion = node->gcsCoords;
@@ -1028,22 +727,386 @@ void PlacemarkSetLayer::update() const
 
         // Set visibility
         const bool isVisible = numMarkers > 0;
-        //visibles->InsertNextValue(isVisible);
+        // visibles->InsertNextValue(isVisible);
 
         // Set label visibility
         const bool labelVis = numMarkers > 1;
-        //labelVisArray->InsertNextValue(labelVis);
+        // labelVisArray->InsertNextValue(labelVis);
 
         // Set color
         const bool isSelected = node->numberOfSelectedMarkers > 0;
-        //selects->InsertNextValue(isSelected);
+        // selects->InsertNextValue(isSelected);
 
         // Set number of markers
-        //numMarkersArray->InsertNextValue(static_cast<const unsigned int>(numMarkers));
+        // numMarkersArray->InsertNextValue(static_cast<const unsigned int>(numMarkers));
     }
-    //this->PolyData->Reset();
-    //this->PolyData->SetPoints(points.GetPointer());
+    // this->PolyData->Reset();
+    // this->PolyData->SetPoints(points.GetPointer());
 
     mInternals->ZoomLevel = zoomLevel;
-    //this->UpdateTime.Modified();
+    // this->UpdateTime.Modified();
+}
+
+void PlacemarkSetLayer::onClean()
+{
+    QGVLayer::onClean();
+    mInternals->mCurZoom = -1;
+    mInternals->mCurRect = {};
+    //mIndex.clear(); // vider le dictionnaire qui contient les éléments graphiques 
+    deleteItems(); // supprimer tous les éléments graphiques (marqueurs et clusters)
+}
+
+void PlacemarkSetLayer::processCamera()
+{
+    if (getMap() == nullptr || !isVisible()) {
+        return;
+    }
+    const QGVProjection* projection = getMap()->getProjection();
+    const QGVCameraState camera = getMap()->getCamera();
+    const QRectF areaProjRect = camera.projRect().intersected(projection->boundaryProjRect());
+    const QGV::GeoRect areaGeoRect = projection->projToGeo(areaProjRect);
+
+    int originZoom = scaleToZoom(camera.scale());
+    int newZoom = qMin(mInternals->ClusteringTreeDepth, qMax(2, originZoom));
+    if (newZoom != originZoom) {
+        return;
+    }
+    const bool zoomChanged = (mInternals->mCurZoom != newZoom);
+    mInternals->mCurZoom = newZoom;
+
+    const int margin = (zoomChanged) ? minMargin : maxMargin;
+    const int sizePerZoom = static_cast<int>(qPow(2, mInternals->mCurZoom));
+    const QRect maxRect = QRect(QPoint(0, 0), QPoint(sizePerZoom, sizePerZoom));
+    const QPoint topLeft = QGV::GeoTilePos::geoToTilePos(mInternals->mCurZoom, areaGeoRect.topLeft()).pos();
+    const QPoint bottomRight = QGV::GeoTilePos::geoToTilePos(mInternals->mCurZoom, areaGeoRect.bottomRight()).pos();
+    QRect activeRect = QRect(topLeft, bottomRight);
+    activeRect = activeRect.adjusted(-margin, -margin, margin, margin);
+    activeRect = activeRect.intersected(maxRect);
+    const bool rectChanged = (!zoomChanged && (mInternals->mCurRect != activeRect));
+    mInternals->mCurRect = activeRect;
+
+    if (!zoomChanged && !rectChanged) {
+        return;
+    }
+
+    /*if (zoomChanged) {
+        qgvDebug() << "new active zoom" << mCurZoom;
+        const int fromZoom = minZoomlevel();
+        const int toZoom = maxZoomlevel();
+        for (int zoom = fromZoom; zoom <= toZoom; ++zoom) {
+            if (zoom == mCurZoom) {
+                for (const QGV::GeoTilePos& current : existingTiles(zoom)) {
+                    removeAllAbove(current);
+                }
+                continue;
+            }
+            for (const QGV::GeoTilePos& nonCurrent : existingTiles(zoom)) {
+                if (!isTileFinished(nonCurrent)) {
+                    qgvDebug() << "cancel non-finished" << nonCurrent;
+                    removeTile(nonCurrent);
+                    continue;
+                }
+                if (zoom < mCurZoom) {
+                    removeWhenCovered(nonCurrent);
+                    continue;
+                }
+            }
+        }
+    }
+
+    if (rectChanged) {
+        qgvDebug() << "new active rect" << mCurRect.topLeft() << mCurRect.bottomRight();
+        for (const QGV::GeoTilePos& tilePos : existingTiles(mCurZoom)) {
+            if (!mCurRect.contains(tilePos.pos())) {
+                qgvDebug() << "delete out of boundary view" << tilePos;
+                removeTile(tilePos);
+            }
+        }
+    }
+
+    QMultiMap<qreal, QGV::GeoTilePos> missing;
+    for (int x = mCurRect.left(); x < mCurRect.right(); ++x) {
+        for (int y = mCurRect.top(); y < mCurRect.bottom(); ++y) {
+            const auto tilePos = QGV::GeoTilePos(mCurZoom, QPoint(x, y));
+            if (isTileExists(tilePos)) {
+                continue;
+            }
+            qreal radius = qSqrt(qPow(x - mCurRect.center().x(), 2) + qPow(y - mCurRect.center().y(), 2));
+            missing.insert(radius, tilePos);
+        }
+    }
+    for (const QGV::GeoTilePos& tilePos : missing) {
+        addTile(tilePos, nullptr);
+    }*/
+}
+
+/* Internals methods implementation */
+// Used when rebuilding clustering tree
+void PlacemarkSetLayer::Internals::insertIntoNodeTable(ClusteringNode* node)
+{
+    int level = node->level - 1;
+    for (; level >= 0; level--) {
+        ClusteringNode* closest = findClosestNode(node, level);
+        if (closest) {
+            // Todo Update closest node with marker info <== is this still relevant, I don't think so
+            if (Debug)
+                printf("[Debug] Found closest node to '%zu' at '%zu'.\n", node->nodeId, closest->nodeId);
+
+            // add a comment to explain this code (I don't really fully understand it, I know it's cluster position
+            // but why the vtkMap developer chose that algorithm to compute cluster position)
+            double denominator = 1.0 + closest->numberOfMarkers;
+            double numerator = closest->gcsCoords.x() * closest->numberOfMarkers + node->gcsCoords.x();
+            closest->gcsCoords.setX(numerator / denominator);
+            numerator = closest->gcsCoords.y() * closest->numberOfMarkers + node->gcsCoords.y();
+            closest->gcsCoords.setY(numerator / denominator);
+
+            closest->numberOfMarkers++;
+            closest->numberOfVisibleMarkers++;
+            closest->markerId =
+                    (size_t)-1; // it became a cluster, maybe we should change the type of marker to a signed type
+            closest->children.insert(node);
+            node->parent = closest;
+
+            // Insertion step ends with first clustering
+            node = closest;
+
+            break; // NB: level will not be decreased
+        } else {
+            // Copy node and add to this level (we can make use of a copy assignement operator but we have to think
+            // carefully before)
+            ClusteringNode* newNode = new ClusteringNode;
+            const auto newNodeId = UniqueNodeId++;
+            AllNodesMap.emplace(newNodeId, newNode);
+            newNode->nodeId = newNodeId;
+            newNode->level = level;
+            newNode->gcsCoords = node->gcsCoords;
+            newNode->numberOfMarkers =
+                    node->numberOfMarkers; // redudant as this info is also contained in newNode->children ?
+            newNode->numberOfVisibleMarkers = node->numberOfVisibleMarkers;
+            newNode->numberOfSelectedMarkers = node->numberOfSelectedMarkers;
+            newNode->markerId = node->markerId;
+            newNode->parent = nullptr;
+            newNode->children.insert(node);
+            NodeTable[size_t(level)].insert(newNode);
+
+            if (Debug)
+                printf("[Debug] Copying node '%zu' to a new one '%zu' for level '%d' \n",
+                       node->nodeId,
+                       newNode->nodeId,
+                       level);
+
+            node->parent = newNode;
+            node = newNode;
+        }
+    }
+
+    // Advance to next level up
+    node = node->parent; // if it's null level is < 0 and the we will not enter in the while loop
+    level--;             // OK
+
+    // Refinement step: Continue iterating up while
+    // * Merge any nodes identified in previous iteration
+    // * Update node coordinates
+    // * Check for closest node
+    std::set<ClusteringNode*> nodesToMerge;
+    std::set<ClusteringNode*> parentsToMerge;
+    while (level >= 0) {
+        // Merge nodes identified in previous iteration
+        std::set<ClusteringNode*>::iterator mergingNodeIter = nodesToMerge.begin();
+        for (; mergingNodeIter != nodesToMerge.end(); mergingNodeIter++) {
+            ClusteringNode* mergingNode = *mergingNodeIter;
+            if (node == mergingNode) {
+                printf("[Warning] Node & merging node are the same '%zu'\n", node->nodeId);
+                Q_ASSERT(false);
+            } else {
+                if (Debug)
+                    printf("[Debug] At level '%d', merging node '%p' into '%p'\n", level, mergingNode, node);
+
+                mergeNodes(node, mergingNode, parentsToMerge, level);
+            }
+        }
+
+        // Update coordinates? <== is this still relevant ? already done in mergeNodes IMHO
+
+        // Update count
+        int numMarkers = 0;
+        int numSelectedMarkers = 0;
+        int numVisibleMarkers = 0;
+        double numerator[2];
+        numerator[0] = numerator[1] = 0.0;
+        std::set<ClusteringNode*>::iterator childIter = node->children.begin();
+        for (; childIter != node->children.end(); childIter++) {
+            ClusteringNode* child = *childIter;
+            numMarkers += child->numberOfMarkers;
+            numSelectedMarkers += child->numberOfSelectedMarkers;
+            numVisibleMarkers += child->numberOfVisibleMarkers;
+
+            numerator[0] += child->numberOfMarkers * child->gcsCoords.x();
+            numerator[1] += child->numberOfMarkers * child->gcsCoords.y();
+        }
+        node->numberOfMarkers = numMarkers;
+        node->numberOfSelectedMarkers = numSelectedMarkers;
+        node->numberOfVisibleMarkers = numVisibleMarkers;
+        if (numMarkers > 1) {
+            node->markerId = (size_t)-1;
+        }
+        node->gcsCoords.setX(numerator[0] / numMarkers);
+        node->gcsCoords.setY(numerator[1] / numMarkers);
+
+        // Check for new clustering partner
+        ClusteringNode* closest = findClosestNode(node, level);
+        if (closest) {
+            mergeNodes(node, closest, parentsToMerge, level);
+        }
+
+        // Setup for next iteration
+        nodesToMerge.clear();
+        nodesToMerge = parentsToMerge;
+        parentsToMerge.clear();
+        node = node->parent;
+        level--;
+    }
+}
+
+// Find closest node within distance threshold squared
+ClusteringNode* PlacemarkSetLayer::Internals::findClosestNode(ClusteringNode* node, const int zoomLevel)
+{
+    ClusteringNode* closestNode = nullptr;
+    double closestDistance2 = ClusterDistance;
+    std::set<ClusteringNode*>& nodeSet = NodeTable[zoomLevel];
+    std::set<ClusteringNode*>::const_iterator setIter = nodeSet.cbegin();
+    for (; setIter != nodeSet.cend(); setIter++) {
+        ClusteringNode* other = *setIter;
+        if (other == node) {
+            continue;
+        }
+
+        double d2 = 0.0;
+        double d1 = other->gcsCoords.x() - node->gcsCoords.x();
+        d2 += d1 * d1;
+        d1 = other->gcsCoords.y() - node->gcsCoords.y();
+        d2 += d1 * d1;
+        d2 *= mOwner->getMap()->getCamera().scale();
+        if (d2 <= closestDistance2) {
+            closestNode = other;
+            closestDistance2 = d2;
+        }
+    }
+
+    return closestNode;
+}
+
+void PlacemarkSetLayer::Internals::mergeNodes(ClusteringNode* node,
+                                              ClusteringNode* mergingNode,
+                                              std::set<ClusteringNode*>& parentsToMerge,
+                                              const int level)
+{
+    if (Debug)
+        printf("[Debug] Merging '%zu' into '%zu'\n", mergingNode->nodeId, node->nodeId);
+
+    if (node->level != mergingNode->level) {
+        printf("[Error] Node '%zu' and node '%zu' are not at the same level\n", node->nodeId, mergingNode->nodeId);
+        Q_ASSERT(false);
+    }
+
+    // Update gcsCoords
+    const size_t numMarkers = node->numberOfMarkers + mergingNode->numberOfMarkers;
+    const double denominator = static_cast<double>(numMarkers);
+
+    double numerator =
+            node->gcsCoords.x() * node->numberOfMarkers + mergingNode->gcsCoords.x() * mergingNode->numberOfMarkers;
+    node->gcsCoords.setX(numerator / denominator);
+    numerator = node->gcsCoords.y() * node->numberOfMarkers + mergingNode->gcsCoords.y() * mergingNode->numberOfMarkers;
+    node->gcsCoords.setY(numerator / denominator);
+
+    node->numberOfMarkers = numMarkers;
+    node->numberOfVisibleMarkers += mergingNode->numberOfVisibleMarkers;
+    node->markerId = -1;
+
+    // Update links to/from children of merging node
+    // Make a working copy of the child set
+    std::set<ClusteringNode*> childNodeSet(mergingNode->children);
+    std::set<ClusteringNode*>::iterator childNodeIter = childNodeSet.begin();
+    for (; childNodeIter != childNodeSet.end(); childNodeIter++) {
+        ClusteringNode* childNode = *childNodeIter;
+        node->children.insert(childNode);
+        childNode->parent = node;
+    }
+
+    // Adjust parent marker counts
+    // Todo recompute from children
+    size_t n = mergingNode->numberOfMarkers;
+    node->parent->numberOfMarkers += n;
+    mergingNode->parent->numberOfMarkers -= n;
+
+    // Remove mergingNode from its parent
+    ClusteringNode* parent = mergingNode->parent;
+    parent->children.erase(mergingNode);
+
+    // Remember parent node if different than node's parent
+    if (mergingNode->parent && mergingNode->parent != node->parent) {
+        parentsToMerge.insert(mergingNode->parent);
+    }
+
+    // Delete mergingNode
+    // todo only delete if valid level specified?
+    auto count = NodeTable[size_t(level)].count(mergingNode);
+    if (count == 1) {
+        NodeTable[size_t(level)].erase(mergingNode);
+    } else {
+        printf("[Error] Node '%zu' not found at level '%d'\n", mergingNode->nodeId, level);
+        Q_ASSERT(false);
+    }
+
+    AllNodesMap.erase(mergingNode->nodeId);
+
+    // todo Check CurrentNodes too?
+    delete mergingNode;
+}
+
+void PlacemarkSetLayer::Internals::getMarkerIdsRecursive(const size_t clusterId, std::vector<size_t>& markerIds)
+{
+    // Get children markers & clusters
+    std::vector<size_t> childMarkerIds;
+    std::vector<size_t> childClusterIds;
+    getClusterChildren(clusterId, childMarkerIds, childClusterIds);
+
+    // Copy marker ids
+    for (size_t i = 0; i < childMarkerIds.size(); i++) {
+        markerIds.push_back(childMarkerIds[i]);
+    }
+
+    // Traverse cluster ids
+    for (size_t j = 0; j < childClusterIds.size(); j++) {
+        size_t childId = childClusterIds[j];
+        getMarkerIdsRecursive(childId, markerIds);
+    }
+}
+
+void PlacemarkSetLayer::Internals::getClusterChildren(const size_t clusterId,
+                                                      std::vector<size_t>& childPoiIds,
+                                                      std::vector<size_t>& childClusterIds)
+{
+    childPoiIds.clear();
+    childClusterIds.clear();
+
+    if (AllNodesMap.find(clusterId) == AllNodesMap.end()) {
+        return;
+    }
+
+    // Check if node has been deleted, I don't think this is needed.
+    ClusteringNode* node = AllNodesMap[clusterId];
+    if (!node) {
+        return;
+    }
+
+    std::set<ClusteringNode*>::iterator childIter = node->children.begin();
+    for (; childIter != node->children.end(); childIter++) {
+        ClusteringNode* child = *childIter;
+        if (child->numberOfMarkers == 1) {
+            childPoiIds.push_back(child->markerId);
+        } else {
+            childClusterIds.push_back(child->nodeId);
+        } // else
+    }     // for (childIter)
 }
