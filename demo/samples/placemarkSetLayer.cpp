@@ -16,6 +16,8 @@
  * along with this program; if not, see https://www.gnu.org/licenses.
  ****************************************************************************/
 
+#include "placemarkCluster.h"
+#include "placemarkPixmap.h"
 #include "placemarkSetLayer.h"
 
 #include <QBrush>
@@ -100,7 +102,7 @@ struct PlacemarkSetLayer::Internals
 
     QPixmap MarkerShape;
 
-    int ZoomLevel; // Used for marker clustering
+    int CurrentZoomLevel; // Used for marker clustering
 
     // will be used to generate new IDs
     size_t UniqueMarkerId;
@@ -134,10 +136,11 @@ struct PlacemarkSetLayer::Internals
     bool Debug;
 
     QElapsedTimer mLastAnimation;
-    int mCurZoom;
-    QRect mCurRect;
 
     PlacemarkSetLayer* const mOwner;
+
+    QDateTime UpdateModified;
+    QDateTime Modified;
 };
 
 PlacemarkSetLayer::PlacemarkSetLayer() :
@@ -152,11 +155,12 @@ PlacemarkSetLayer::PlacemarkSetLayer() :
     mInternals->ClusterDistance = 40;
     mInternals->Debug = false;
 
-    mInternals->ZoomLevel = -1;
+    mInternals->CurrentZoomLevel = -1;
     mInternals->NodeTable.resize(mInternals->ClusteringTreeDepth);
     mInternals->UniqueMarkerId = 0;
     mInternals->UniqueNodeId = 0;
 
+    mInternals->UpdateModified = mInternals->Modified = QDateTime::currentDateTime();
 }
 
 PlacemarkSetLayer::~PlacemarkSetLayer()
@@ -169,11 +173,13 @@ PlacemarkSetLayer::~PlacemarkSetLayer()
 void PlacemarkSetLayer::setImage(const QPixmap& img)
 {
     mInternals->MarkerShape = img;
+    mInternals->Modified = QDateTime::currentDateTime();
 }
 
 void PlacemarkSetLayer::setClustering(const bool enable)
 {
     mInternals->Clustering = enable;
+    mInternals->Modified = QDateTime::currentDateTime();
 }
 
 void PlacemarkSetLayer::setClusteringTreeDepth(size_t depth)
@@ -185,11 +191,13 @@ void PlacemarkSetLayer::setClusteringTreeDepth(size_t depth)
         depth = 20;
 
     mInternals->ClusteringTreeDepth = depth;
+    mInternals->Modified = QDateTime::currentDateTime();
 }
 
 void PlacemarkSetLayer::setClusterDistance(const size_t distance)
 {
     mInternals->ClusterDistance = distance;
+    mInternals->Modified = QDateTime::currentDateTime();
 }
 
 size_t PlacemarkSetLayer::getNumberOfMarkers() const
@@ -251,6 +259,7 @@ size_t PlacemarkSetLayer::add(const QGV::GeoPos& pos)
     mInternals->insertIntoNodeTable(node);
     
     // TODO : notify that a new POI has been added to the set
+    mInternals->Modified = QDateTime::currentDateTime();
 
     //dumpAllNodesMap();
 
@@ -371,6 +380,7 @@ bool PlacemarkSetLayer::remove(const size_t markerId)
     //dumpAllNodesMap();
 
     // TODO : notify that a POI has been deleted from the set
+    mInternals->Modified = QDateTime::currentDateTime();
 
     return true;
 }
@@ -400,7 +410,7 @@ void PlacemarkSetLayer::removeAll()
     mInternals->UniqueNodeId = 0;
 
     // TODO : notify that all POIs have been deleted from the set so that we can request a redraw of the map
-
+    mInternals->Modified = QDateTime::currentDateTime();
 }
 
 void PlacemarkSetLayer::recomputeClusters()
@@ -450,6 +460,7 @@ void PlacemarkSetLayer::recomputeClusters()
     }
 
     // TODO : notify that clusters has been recomputed so that we can request a redraw of the map
+    mInternals->Modified = QDateTime::currentDateTime();
 
 
     // old stuff :
@@ -510,7 +521,7 @@ bool PlacemarkSetLayer::setVisibility(const size_t poiId, const bool visible)
     mInternals->MarkerVisibleMap[poiId] = visible;
 
     // TODO : notify that the visibility has been changed so that we can request a redraw of the map
-
+    mInternals->Modified = QDateTime::currentDateTime();
     
     return true;
 }
@@ -632,38 +643,47 @@ void PlacemarkSetLayer::onCamera(const QGVCameraState& oldState, const QGVCamera
 void PlacemarkSetLayer::onUpdate()
 {
     QGVLayer::onUpdate();
-    //processCamera(); // todo : mettre tout le code ci-dessous dans processCamera()
+    processCamera();
+}
+
+void PlacemarkSetLayer::onClean()
+{
+    QGVLayer::onClean();
+    deleteItems();
+}
+
+void PlacemarkSetLayer::processCamera()
+{
+    if (getMap() == nullptr || !isVisible()) {
+        return;
+    }
+    const QGVProjection* projection = getMap()->getProjection();
+    const QGVCameraState camera = getMap()->getCamera();
+    const QRectF areaProjRect = camera.projRect().intersected(projection->boundaryProjRect());
+    const QGV::GeoRect areaGeoRect = projection->projToGeo(areaProjRect);
 
     // 1. Get zoom level (0 based), clamp it if necessary
-    // Clip zoom level to size of cluster table
-    int zoomLevel = scaleToZoom(getMap()->getCamera().scale()) - 1;
-
-    Q_ASSERT(zoomLevel >= 0);
-    // clamp
-    if (zoomLevel >= int(mInternals->NodeTable.size())) {
-        zoomLevel = int(mInternals->NodeTable.size()) - 1;
+    int originZoom = scaleToZoom(camera.scale()) - 1;
+    int newZoom = qMin(int(mInternals->NodeTable.size()) - 1, originZoom);
+    if (newZoom != originZoom) {
+        return;
     }
+    const bool zoomChanged = (mInternals->CurrentZoomLevel != newZoom);
+    mInternals->CurrentZoomLevel = newZoom;
 
     // 2. Only need to rebuild geometrical data if either
     // 1. Contents have been modified
     // 2. In clustering mode and zoom level changed
-    /* bool changed = this->GetMTime() > this->UpdateTime.GetMTime();
-    changed |= this->Clustering && (zoomLevel != this->Internals->ZoomLevel);
-    changed |= this->GetMTime() > this->Internals->ShapeInitTime;
+    bool changed = mInternals->Modified > mInternals->UpdateModified;
+    changed |= mInternals->Clustering && zoomChanged;
     if (!changed) {
         return;
-    }*/
+    }
 
     // In non-clustering mode, markers stored at leaf level
-    /* if (!this->Clustering) {
-        zoomLevel = int(this->Internals->NodeTable.size()) - 1;
-    }*/
-
-    // Copy marker info into polydata vtkNew<vtkPoints> points;
-
-    // Get pointers to data arrays - clear points lists
-
-    // Update visibility...
+    if (!mInternals->Clustering) {
+        newZoom = int(mInternals->NodeTable.size()) - 1;
+    }
 
     // Another time :
     // Coefficients for scaling cluster size, using simple 2nd order model
@@ -677,7 +697,9 @@ void PlacemarkSetLayer::onUpdate()
     mInternals->mProjPoints.clear();
     mInternals->mProjClusters.clear();
 
-    std::set<ClusteringNode*>& nodeSet = mInternals->NodeTable[size_t(zoomLevel)];
+    deleteItems();
+
+    std::set<ClusteringNode*>& nodeSet = mInternals->NodeTable[size_t(newZoom)];
     std::set<ClusteringNode*>::const_iterator iter;
     for (iter = nodeSet.cbegin(); iter != nodeSet.cend(); iter++) {
         ClusteringNode* const node = *iter;
@@ -685,162 +707,40 @@ void PlacemarkSetLayer::onUpdate()
             continue;
         }
 
-        // Insert point
-        // double z = node->gcsCoords[2] + (node->NumberOfSelectedMarkers ? this->SelectedZOffset : 0.0);
-        // points->InsertNextPoint(node->gcsCoords[0], node->gcsCoords[1], z);
         mInternals->CurrentNodes.push_back(node);
 
         if (node->numberOfMarkers == 1) {
             mInternals->mProjPoints.push_back(node->gcsCoords);
-
-            /* types->InsertNextValue(MARKER_TYPE);
-            const auto map = this->Layer->GetMap();
-            const double adjustedMarkerSize = map->GetDevicePixelRatio() * int(this->PointMarkerSize);
-            const double markerScale = adjustedMarkerSize / this->BaseMarkerSize;
-            scales->InsertNextValue(markerScale);*/
+            addItem(new PlacemarkPixmap(node->geoCoords, node->gcsCoords, mInternals->MarkerShape));
         } else if (mInternals->Clustering) {
+            // do we still need the lines above ?
             ClusterDrawingInformations cdi;
             cdi.poiCount = node->numberOfMarkers;
             cdi.postion = node->gcsCoords;
             mInternals->mProjClusters.push_back(cdi);
             mInternals->mProjClustersPolygon.push_back(cdi.postion);
 
-            /*types->InsertNextValue(CLUSTER_TYPE);
-            switch (this->ClusterMarkerSizeMode) {
-                case POINTS_CONTAINED: {
-                    // Scale with number of markers (quadratic model)
-                    const double x = static_cast<double>(node->NumberOfMarkers);
-                    const double scale = k * x * x / (x * x + b);
-                    scales->InsertNextValue(scale);
-                } break;
+            addItem(new PlacemarkCluster(node->geoCoords, node->gcsCoords, node->numberOfMarkers));
 
-                case USER_DEFINED: {
-                    // Scale with user defined size
-                    const auto map = this->Layer->GetMap();
-                    const double adjustedMarkerSize = map->GetDevicePixelRatio() * int(this->ClusterMarkerSize);
-                    const double markerScale = adjustedMarkerSize / this->BaseMarkerSize;
-                    scales->InsertNextValue(markerScale);
-                } break;
-            }*/
+            /*// Scale with number of markers (quadratic model)
+            const double x = static_cast<double>(node->NumberOfMarkers);
+            const double scale = k * x * x / (x * x + b);*/
         }
         const size_t numMarkers = node->numberOfVisibleMarkers;
 
         // Set visibility
         const bool isVisible = numMarkers > 0;
-        // visibles->InsertNextValue(isVisible);
-
-        // Set label visibility
-        const bool labelVis = numMarkers > 1;
-        // labelVisArray->InsertNextValue(labelVis);
 
         // Set color
         const bool isSelected = node->numberOfSelectedMarkers > 0;
-        // selects->InsertNextValue(isSelected);
-
-        // Set number of markers
-        // numMarkersArray->InsertNextValue(static_cast<const unsigned int>(numMarkers));
     }
-    // this->PolyData->Reset();
-    // this->PolyData->SetPoints(points.GetPointer());
 
-    mInternals->ZoomLevel = zoomLevel;
-    // this->UpdateTime.Modified();
+    mInternals->CurrentZoomLevel = newZoom;
+    mInternals->UpdateModified = QDateTime::currentDateTime();
 }
 
-void PlacemarkSetLayer::onClean()
-{
-    QGVLayer::onClean();
-    mInternals->mCurZoom = -1;
-    mInternals->mCurRect = {};
-    //mIndex.clear(); // vider le dictionnaire qui contient les éléments graphiques 
-    deleteItems(); // supprimer tous les éléments graphiques (marqueurs et clusters)
-}
+/* Internals' methods implementation */
 
-void PlacemarkSetLayer::processCamera()
-{
-    if (getMap() == nullptr || !isVisible()) {
-        return;
-    }
-    const QGVProjection* projection = getMap()->getProjection();
-    const QGVCameraState camera = getMap()->getCamera();
-    const QRectF areaProjRect = camera.projRect().intersected(projection->boundaryProjRect());
-    const QGV::GeoRect areaGeoRect = projection->projToGeo(areaProjRect);
-
-    int originZoom = scaleToZoom(camera.scale());
-    int newZoom = qMin(mInternals->ClusteringTreeDepth, qMax(2, originZoom));
-    if (newZoom != originZoom) {
-        return;
-    }
-    const bool zoomChanged = (mInternals->mCurZoom != newZoom);
-    mInternals->mCurZoom = newZoom;
-
-    const int margin = (zoomChanged) ? minMargin : maxMargin;
-    const int sizePerZoom = static_cast<int>(qPow(2, mInternals->mCurZoom));
-    const QRect maxRect = QRect(QPoint(0, 0), QPoint(sizePerZoom, sizePerZoom));
-    const QPoint topLeft = QGV::GeoTilePos::geoToTilePos(mInternals->mCurZoom, areaGeoRect.topLeft()).pos();
-    const QPoint bottomRight = QGV::GeoTilePos::geoToTilePos(mInternals->mCurZoom, areaGeoRect.bottomRight()).pos();
-    QRect activeRect = QRect(topLeft, bottomRight);
-    activeRect = activeRect.adjusted(-margin, -margin, margin, margin);
-    activeRect = activeRect.intersected(maxRect);
-    const bool rectChanged = (!zoomChanged && (mInternals->mCurRect != activeRect));
-    mInternals->mCurRect = activeRect;
-
-    if (!zoomChanged && !rectChanged) {
-        return;
-    }
-
-    /*if (zoomChanged) {
-        qgvDebug() << "new active zoom" << mCurZoom;
-        const int fromZoom = minZoomlevel();
-        const int toZoom = maxZoomlevel();
-        for (int zoom = fromZoom; zoom <= toZoom; ++zoom) {
-            if (zoom == mCurZoom) {
-                for (const QGV::GeoTilePos& current : existingTiles(zoom)) {
-                    removeAllAbove(current);
-                }
-                continue;
-            }
-            for (const QGV::GeoTilePos& nonCurrent : existingTiles(zoom)) {
-                if (!isTileFinished(nonCurrent)) {
-                    qgvDebug() << "cancel non-finished" << nonCurrent;
-                    removeTile(nonCurrent);
-                    continue;
-                }
-                if (zoom < mCurZoom) {
-                    removeWhenCovered(nonCurrent);
-                    continue;
-                }
-            }
-        }
-    }
-
-    if (rectChanged) {
-        qgvDebug() << "new active rect" << mCurRect.topLeft() << mCurRect.bottomRight();
-        for (const QGV::GeoTilePos& tilePos : existingTiles(mCurZoom)) {
-            if (!mCurRect.contains(tilePos.pos())) {
-                qgvDebug() << "delete out of boundary view" << tilePos;
-                removeTile(tilePos);
-            }
-        }
-    }
-
-    QMultiMap<qreal, QGV::GeoTilePos> missing;
-    for (int x = mCurRect.left(); x < mCurRect.right(); ++x) {
-        for (int y = mCurRect.top(); y < mCurRect.bottom(); ++y) {
-            const auto tilePos = QGV::GeoTilePos(mCurZoom, QPoint(x, y));
-            if (isTileExists(tilePos)) {
-                continue;
-            }
-            qreal radius = qSqrt(qPow(x - mCurRect.center().x(), 2) + qPow(y - mCurRect.center().y(), 2));
-            missing.insert(radius, tilePos);
-        }
-    }
-    for (const QGV::GeoTilePos& tilePos : missing) {
-        addTile(tilePos, nullptr);
-    }*/
-}
-
-/* Internals methods implementation */
 // Used when rebuilding clustering tree
 void PlacemarkSetLayer::Internals::insertIntoNodeTable(ClusteringNode* node)
 {

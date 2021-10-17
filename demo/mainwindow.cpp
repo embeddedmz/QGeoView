@@ -165,9 +165,9 @@ void MainWindow::init()
     // plus tard...
     //ui->geoMap->addWidget(new QGVWidgetColorBar());
 
-    /* QString url = R"(C:/Users/Me/Desktop/image.png)";
-    QPixmap img(url);*/
-    QPixmap pix(64, 64);
+    QString url = R"(C:\\Users\\Amine Mzoughi\\Desktop\\blu-circle.png)";
+    QPixmap pix(url);
+    /*QPixmap pix(64, 64);
     QPainter paint(&pix);
     QPolygon triangle = QVector<QPoint>{ QPoint{ 0, 63 }, QPoint{ 32, 0 }, QPoint{ 63, 63 } };
     paint.setPen(QPen(QBrush(Qt::GlobalColor::blue),
@@ -177,7 +177,7 @@ void MainWindow::init()
                          Qt::PenJoinStyle::RoundJoin));
     paint.setBrush(QBrush(Qt::GlobalColor::blue));
     paint.drawPolygon(triangle, Qt::WindingFill);
-    paint.end();
+    paint.end();*/
 
     PlacemarkSetLayer* myPOIs = new PlacemarkSetLayer();
     // faudra le faire avant d'ajouter les POIs ou bien il faudra passer la geomap au ctor
