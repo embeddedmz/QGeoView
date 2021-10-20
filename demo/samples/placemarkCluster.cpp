@@ -38,6 +38,9 @@ PlacemarkCluster::PlacemarkCluster(const QGV::GeoPos& geoPos, const QPointF& map
     : mInternals(new PlacemarkCluster::Internals(geoPos, mapPos, count))
 {
     setSelectable(false); // true: plus tard
+
+    setFlag(QGV::ItemFlag::IgnoreScale);
+    setFlag(QGV::ItemFlag::IgnoreAzimuth);
 }
 
 PlacemarkCluster::~PlacemarkCluster()
@@ -45,9 +48,8 @@ PlacemarkCluster::~PlacemarkCluster()
     delete mInternals;
 }
 
-/*
 // already done by the layer and stored in mInternals->clusterMapPos
-void PlacemarkCluster::onProjection(QGVMap* geoMap)
+/* void PlacemarkCluster::onProjection(QGVMap* geoMap)
 {
     QGVDrawItem::onProjection(geoMap);
     mInternals->clusterMapPos = geoMap->getProjection()->geoToProj(mInternals->clusterGeoPos);

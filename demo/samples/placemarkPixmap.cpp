@@ -37,6 +37,9 @@ PlacemarkPixmap::PlacemarkPixmap(const QGV::GeoPos& geoPos, const QPointF& mapPo
     : mInternals(new PlacemarkPixmap::Internals(geoPos, mapPos, pixmap))
 {
     setSelectable(false); // true: plus tard
+
+    setFlag(QGV::ItemFlag::IgnoreScale);
+    setFlag(QGV::ItemFlag::IgnoreAzimuth);
 }
 
 PlacemarkPixmap::~PlacemarkPixmap()
@@ -50,6 +53,10 @@ QPainterPath PlacemarkPixmap::projShape() const
     path.addRect(QRectF(mInternals->markerMapPos.x() - mInternals->pixmap.width() / 2,
                         mInternals->markerMapPos.y() - mInternals->pixmap.height() / 2,
                         mInternals->pixmap.width(), mInternals->pixmap.height()));
+    /*path.addRect(QRectF(mInternals->markerMapPos.x(),
+                        mInternals->markerMapPos.y(),
+                        mInternals->pixmap.width(),
+                        mInternals->pixmap.height()));*/
     return path;
 }
 

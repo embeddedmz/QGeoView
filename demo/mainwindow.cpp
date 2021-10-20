@@ -28,6 +28,7 @@
 
 #include "samples/polyline.h"
 #include "samples/placemark.h"
+#include "samples/placemarkCluster.h"
 #include "samples/placemarkSetLayer.h"
 #include "samples/raster.h"
 
@@ -165,19 +166,24 @@ void MainWindow::init()
     // plus tard...
     //ui->geoMap->addWidget(new QGVWidgetColorBar());
 
-    /* QString url = R"(C:\\Users\\Amine Mzoughi\\Desktop\\blu-circle.png)";
+    //QString url = R"(C:\\Users\\Amine Mzoughi\\Desktop\\blu-circle.png)";
+    /*QString url = R"(C:\\Users\\mmzoughi\\Pictures\\blu-circle.png)";
     QPixmap pix(url);*/
+
     QPixmap pix(64, 64);
     QPainter paint(&pix);
-    QPolygon triangle = QVector<QPoint>{ QPoint{ 0, 63 }, QPoint{ 32, 0 }, QPoint{ 63, 63 } };
-    paint.setPen(QPen(QBrush(Qt::GlobalColor::blue),
+    QPolygon triangle = QVector<QPoint>{ QPoint{ 0, 0 }, QPoint{ 32, 63 }, QPoint{ 63, 0 } };
+    paint.setPen(QPen(QBrush(Qt::GlobalColor::red),
                          1,
                          Qt::PenStyle::SolidLine,
                          Qt::PenCapStyle::RoundCap,
                          Qt::PenJoinStyle::RoundJoin));
-    paint.setBrush(QBrush(Qt::GlobalColor::blue));
+    paint.setBrush(QBrush(Qt::GlobalColor::red));
     paint.drawPolygon(triangle, Qt::WindingFill);
     paint.end();
+
+    //ui->geoMap->addItem(new PlacemarkCluster(QGV::GeoPos(0, 0), {}, 10));
+    //return;
 
     PlacemarkSetLayer* myPOIs = new PlacemarkSetLayer();
     // faudra le faire avant d'ajouter les POIs ou bien il faudra passer la geomap au ctor
