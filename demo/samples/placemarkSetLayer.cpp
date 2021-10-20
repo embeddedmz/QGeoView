@@ -139,8 +139,7 @@ struct PlacemarkSetLayer::Internals
 
     PlacemarkSetLayer* const mOwner;
 
-    QDateTime UpdateModified;
-    QDateTime Modified;
+    bool UpdateRequested;
 };
 
 PlacemarkSetLayer::PlacemarkSetLayer() :
@@ -160,7 +159,7 @@ PlacemarkSetLayer::PlacemarkSetLayer() :
     mInternals->UniqueMarkerId = 0;
     mInternals->UniqueNodeId = 0;
 
-    mInternals->UpdateModified = mInternals->Modified = QDateTime::currentDateTime();
+    mInternals->UpdateRequested = true;
 }
 
 PlacemarkSetLayer::~PlacemarkSetLayer()
@@ -173,13 +172,13 @@ PlacemarkSetLayer::~PlacemarkSetLayer()
 void PlacemarkSetLayer::setImage(const QPixmap& img)
 {
     mInternals->MarkerShape = img;
-    mInternals->Modified = QDateTime::currentDateTime();
+    mInternals->UpdateRequested = true;
 }
 
 void PlacemarkSetLayer::setClustering(const bool enable)
 {
     mInternals->Clustering = enable;
-    mInternals->Modified = QDateTime::currentDateTime();
+    mInternals->UpdateRequested = true;
 }
 
 void PlacemarkSetLayer::setClusteringTreeDepth(size_t depth)
@@ -191,13 +190,13 @@ void PlacemarkSetLayer::setClusteringTreeDepth(size_t depth)
         depth = 20;
 
     mInternals->ClusteringTreeDepth = depth;
-    mInternals->Modified = QDateTime::currentDateTime();
+    mInternals->UpdateRequested = true;
 }
 
 void PlacemarkSetLayer::setClusterDistance(const size_t distance)
 {
     mInternals->ClusterDistance = distance;
-    mInternals->Modified = QDateTime::currentDateTime();
+    mInternals->UpdateRequested = true;
 }
 
 size_t PlacemarkSetLayer::getNumberOfMarkers() const
@@ -259,7 +258,7 @@ size_t PlacemarkSetLayer::add(const QGV::GeoPos& pos)
     mInternals->insertIntoNodeTable(node);
     
     // TODO : notify that a new POI has been added to the set
-    mInternals->Modified = QDateTime::currentDateTime();
+    mInternals->UpdateRequested = true;
 
     //dumpAllNodesMap();
 
@@ -380,7 +379,7 @@ bool PlacemarkSetLayer::remove(const size_t markerId)
     //dumpAllNodesMap();
 
     // TODO : notify that a POI has been deleted from the set
-    mInternals->Modified = QDateTime::currentDateTime();
+    mInternals->UpdateRequested = true;
 
     return true;
 }
@@ -410,7 +409,7 @@ void PlacemarkSetLayer::removeAll()
     mInternals->UniqueNodeId = 0;
 
     // TODO : notify that all POIs have been deleted from the set so that we can request a redraw of the map
-    mInternals->Modified = QDateTime::currentDateTime();
+    mInternals->UpdateRequested = true;
 }
 
 void PlacemarkSetLayer::recomputeClusters()
@@ -460,7 +459,7 @@ void PlacemarkSetLayer::recomputeClusters()
     }
 
     // TODO : notify that clusters has been recomputed so that we can request a redraw of the map
-    mInternals->Modified = QDateTime::currentDateTime();
+    mInternals->UpdateRequested = true;
 
 
     // old stuff :
@@ -521,7 +520,7 @@ bool PlacemarkSetLayer::setVisibility(const size_t poiId, const bool visible)
     mInternals->MarkerVisibleMap[poiId] = visible;
 
     // TODO : notify that the visibility has been changed so that we can request a redraw of the map
-    mInternals->Modified = QDateTime::currentDateTime();
+    mInternals->UpdateRequested = true;
     
     return true;
 }
@@ -674,7 +673,7 @@ void PlacemarkSetLayer::processCamera()
     // 2. Only need to rebuild geometrical data if either
     // 1. Contents have been modified
     // 2. In clustering mode and zoom level changed
-    bool changed = mInternals->Modified > mInternals->UpdateModified;
+    bool changed = mInternals->UpdateRequested;
     changed |= mInternals->Clustering && zoomChanged;
     if (!changed) {
         return;
@@ -736,7 +735,7 @@ void PlacemarkSetLayer::processCamera()
     }
 
     mInternals->CurrentZoomLevel = newZoom;
-    mInternals->UpdateModified = QDateTime::currentDateTime();
+    mInternals->UpdateRequested = false;
 }
 
 /* Internals' methods implementation */
