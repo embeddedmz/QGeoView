@@ -58,14 +58,22 @@ set(DEMO_SRCS
     samples/mytiles.h
     samples/mytile.cpp
     samples/mytile.h
-	samples/polyline.cpp
+    samples/polyline.cpp
     samples/polyline.h
     samples/placemarkCluster.cpp
     samples/placemarkCluster.h
     samples/placemarkSetLayer.cpp
-	samples/placemarkSetLayer.h
-	samples/placemarkPixmap.cpp
-	samples/placemarkPixmap.h
+    samples/placemarkSetLayer.h
+    samples/placemarkPixmap.cpp
+    samples/placemarkPixmap.h
+    samples/colorMap.cpp
+    samples/colorMap.h
+    samples/colorMapPresetDialog.cpp
+    samples/colorMapPresetDialog.h
+    samples/colorMapPresets.cpp
+    samples/colorMapPresets.h
+    samples/colorMapPresetToPixmap.cpp
+    samples/colorMapPresetToPixmap.h
 )
 
 if(BUILD_GDAL_EXAMPLE)
@@ -76,7 +84,9 @@ if(BUILD_GDAL_EXAMPLE)
     list(APPEND DEMO_SRCS samples/raster.h)
 endif(BUILD_GDAL_EXAMPLE)
 
-add_executable(qgeoview-demo ${GUI_TYPE} ${DEMO_SRCS} ${APP_ICON_RESOURCE_WINDOWS})
+set(UI_SRCS samples/colorMapPresetDialog.ui)
+
+add_executable(qgeoview-demo ${GUI_TYPE} ${DEMO_SRCS} ${APP_ICON_RESOURCE_WINDOWS} ${UI_SRCS})
 
 target_link_libraries(qgeoview-demo
     PRIVATE
