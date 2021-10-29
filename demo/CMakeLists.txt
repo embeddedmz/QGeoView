@@ -74,6 +74,16 @@ set(DEMO_SRCS
     samples/colorMapPresets.h
     samples/colorMapPresetToPixmap.cpp
     samples/colorMapPresetToPixmap.h
+    samples/rescaleRangeDialog.cpp
+    samples/rescaleRangeDialog.h
+    samples/clusteringMarkersDemo.h
+    samples/clusteringMarkersDemo.cpp
+    samples/geotiffDemo.h
+    samples/geotiffDemo.cpp
+    samples/pathColoring.h
+    samples/pathColoring.cpp
+    samples/QGVWidgetColorBar.cpp
+    samples/QGVWidgetColorBar.h
 )
 
 if(BUILD_GDAL_EXAMPLE)
@@ -82,9 +92,11 @@ if(BUILD_GDAL_EXAMPLE)
 
     list(APPEND DEMO_SRCS samples/raster.cpp)
     list(APPEND DEMO_SRCS samples/raster.h)
+
+    add_compile_definitions(BUILD_GDAL_EXAMPLE)
 endif(BUILD_GDAL_EXAMPLE)
 
-set(UI_SRCS samples/colorMapPresetDialog.ui)
+set(UI_SRCS samples/colorMapPresetDialog.ui samples/rescaleRangeDialog.ui)
 
 add_executable(qgeoview-demo ${GUI_TYPE} ${DEMO_SRCS} ${APP_ICON_RESOURCE_WINDOWS} ${UI_SRCS})
 

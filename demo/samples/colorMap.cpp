@@ -14,7 +14,7 @@
 */
 QColor ColorMap::color(const double min, const double max, double value) const
 {
-    return QColor::fromRgba(rgb(interval, value));
+    return QColor::fromRgba(rgb(min, max, value));
 }
 
 /*!
@@ -30,10 +30,10 @@ QVector<QRgb> ColorMap::colorTable(const double min, const double max) const
 {
     QVector<QRgb> table(256);
 
-    if (interval.isValid()) {
-        const double step = interval.width() / (table.size() - 1);
+    if (min <= max) {
+        const double step = (max - min) / (table.size() - 1);
         for (int i = 0; i < table.size(); i++)
-            table[i] = rgb(interval, interval.minValue() + step * i);
+            table[i] = rgb(min, max, min + step * i);
     }
 
     return table;
@@ -154,8 +154,6 @@ QRgb LinearColorMap::rgb(const double min, const double max, double value) const
     return d_colorStops.rgb(d_mode, ratio);
 }
 
-
-
 LinearColorMap::ColorStops::ColorStops() :
     d_doAlpha(false)
 {
@@ -194,7 +192,7 @@ void LinearColorMap::ColorStops::insert(double pos, const QColor& color)
         d_stops[index].updateSteps(d_stops[index + 1]);
 }
 
-QRgb LinearColorMap::ColorStops::rgb(LinearColorMap::Mode, double pos) const
+QRgb LinearColorMap::ColorStops::rgb(LinearColorMap::Mode mode, double pos) const
 {
     if (pos <= 0.0)
         return d_stops[0].rgb;
@@ -234,7 +232,7 @@ QVector<double> LinearColorMap::ColorStops::stops() const
     return positions;
 }
 
-int LinearColorMap::findUpper(double pos) const
+int LinearColorMap::ColorStops::findUpper(double pos) const
 {
     int index = 0;
     int n = d_stops.size();

@@ -5,6 +5,32 @@
 namespace ColorMapPresets
 {
 
+LinearColorMap controlPointsToLinearColorMap(const ControlPoints& ctrlPts)
+{
+    if (ctrlPts.size() < 2 || std::get<0>(ctrlPts.front()) != 0. || std::get<0>(ctrlPts.back()) != 1. ||
+        !std::is_sorted(ctrlPts.cbegin(), ctrlPts.cend(), [](const ControlPoint& x, const ControlPoint& y) {
+            // strict weak ordering
+            return std::get<0>(x) < std::get<0>(y);
+        })) {
+        QColor from, to;
+        return LinearColorMap(from, to);
+    }
+
+    QColor from, to;
+    from.setRgbF(std::get<1>(ctrlPts.front()), std::get<2>(ctrlPts.front()), std::get<3>(ctrlPts.front()));
+    to.setRgbF(std::get<1>(ctrlPts.back()), std::get<2>(ctrlPts.back()), std::get<3>(ctrlPts.back()));
+
+    LinearColorMap lcm(from, to);
+
+    for (size_t i = 1; i < ctrlPts.size() - 1; ++i) {
+        QColor cs;
+        cs.setRgbF(std::get<1>(ctrlPts[i]), std::get<2>(ctrlPts[i]), std::get<3>(ctrlPts[i]));
+        lcm.addColorStop(std::get<0>(ctrlPts[i]), cs);
+    }
+
+    return lcm;
+}
+
 ControlPoints BlackBodyRadiation()
 {
     const double rgbPoints[] = {

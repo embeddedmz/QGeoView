@@ -1,4 +1,5 @@
-#pragma once
+#ifndef RESCALERANGEDIALOG_H
+#define RESCALERANGEDIALOG_H
 
 #include <QDialog>
 
@@ -21,3 +22,5 @@ protected:
     Ui::RescaleRangeDialog m_Ui;
 
 };
+
+#endif

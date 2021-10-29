@@ -1,35 +1,31 @@
-#ifndef WaterfallPresetToPixmap_h
-#define WaterfallPresetToPixmap_h
+#pragma once
 
-#include "Waterfall/ColorMaps.h"
+#include "colorMapPresets.h"
 
 #include <QObject>
-#include <QScopedPointer>
 
 class QPixmap;
 class QSize;
 
 /**
-* WaterfallPresetToPixmap is a helper class to generate QPixmap from a color/opacity
-* color map. Use WaterfallPresetToPixmap::render() to generate a QPixmap for a color
+* ColorMapPresetToPixmap is a helper class to generate QPixmap from a color/opacity
+* color map. Use ColorMapPresetToPixmap::render() to generate a QPixmap for a color
 * map.
 */
-class WaterfallPresetToPixmap : public QObject
+class ColorMapPresetToPixmap : public QObject
 {
     Q_OBJECT
     typedef QObject Superclass;
 
 public:
-    WaterfallPresetToPixmap(QObject* parent = nullptr);
+    ColorMapPresetToPixmap(QObject* parent = nullptr);
 
     /**
      * Render a color map to a pixmap for the given resolution.
      */
-    QPixmap render(const ColorMaps::ControlPoints& controlPoints, const QSize& resolution) const;
+    QPixmap render(const ColorMapPresets::ControlPoints& controlPoints, const QSize& resolution) const;
 
 private:
-    Q_DISABLE_COPY(WaterfallPresetToPixmap)
+    Q_DISABLE_COPY(ColorMapPresetToPixmap)
 
 };
-
-#endif

@@ -1,4 +1,4 @@
-#include "rescaleRangeDialog.h"
+#include "RescaleRangeDialog.h"
 
 #include <algorithm>
 

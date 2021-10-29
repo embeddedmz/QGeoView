@@ -12,7 +12,7 @@
 
 namespace
 {
-using namespace ColorMapsPresets;
+using namespace ColorMapPresets;
 
 // Move to ColorMapsPresets ?
 std::vector<ControlPoints> s_controlPointsCollection = { BlackBodyRadiation(),
@@ -67,7 +67,8 @@ public:
     {
         for (size_t cc = 0, max = s_controlPointsCollection.size(); cc < max; ++cc)
         {
-            if (std::equal(cps.begin(), cps.end(), s_controlPointsCollection[cc].begin()))
+            if (cps.size() == s_controlPointsCollection.size() && 
+                std::equal(cps.begin(), cps.end(), s_controlPointsCollection[cc].begin()))
             {
                 return this->index(cc, 0, QModelIndex());
             }
@@ -136,7 +137,7 @@ class ColorMapPresetDialogProxyModel : public QSortFilterProxyModel
     ColorMapPresetDialog::Modes Mode;
 
 public:
-    ColorMapPresetProxyModel(ColorMapPresetDialog::Modes mode, QObject* parentObject = nullptr) :
+    ColorMapPresetDialogProxyModel(ColorMapPresetDialog::Modes mode, QObject* parentObject = nullptr) :
         Superclass(parentObject),
         Mode(mode)
     {
@@ -215,7 +216,7 @@ ColorMapPresetDialog::~ColorMapPresetDialog()
     delete Internals;
 }
 
-void ColorMapPresetDialog::setCurrentControlPoints(const ColorMaps::ControlPoints& ctrlPts)
+void ColorMapPresetDialog::setCurrentControlPoints(const ColorMapPresets::ControlPoints& ctrlPts)
 {
     ColorMapPresetDialogInternals& internals = (*this->Internals);
     QModelIndex idx = internals.Model->indexFromControlPoints(ctrlPts);
@@ -227,7 +228,7 @@ void ColorMapPresetDialog::setCurrentControlPoints(const ColorMaps::ControlPoint
     }
 }
 
-const ColorMapsPresets::ControlPoints& ColorMapPresetDialog::currentControlPoints()
+const ColorMapPresets::ControlPoints& ColorMapPresetDialog::currentControlPoints()
 {
     const ColorMapPresetDialogInternals& internals = *this->Internals;
     const Ui::ColorMapPresetDialog& ui = this->Internals->Ui;

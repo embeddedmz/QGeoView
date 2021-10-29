@@ -15,12 +15,12 @@ namespace ColorMapPresets
 typedef std::tuple<double, double, double, double> ControlPoint;
 typedef std::vector<ControlPoint> ControlPoints;
 
+LinearColorMap controlPointsToLinearColorMap(const ControlPoints& ctrlPts);
+
 ControlPoints BlackBodyRadiation();
 ControlPoints CoolToWarm();
 ControlPoints Jet();
 ControlPoints Grayscale();
 ControlPoints XRay();
-
-ColorMap* controlPointsToColorMap(const ControlPoints& ctrlPts);
 
 }

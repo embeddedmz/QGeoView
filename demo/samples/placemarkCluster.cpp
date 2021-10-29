@@ -65,19 +65,20 @@ QPainterPath PlacemarkCluster::projShape() const
 
 void PlacemarkCluster::projPaint(QPainter* painter)
 {
-    QBrush greenBrush(Qt::GlobalColor::green);
+    QBrush greenBrush(Qt::GlobalColor::red);
     painter->setPen(
             QPen(greenBrush, 1, Qt::PenStyle::SolidLine, Qt::PenCapStyle::RoundCap, Qt::PenJoinStyle::RoundJoin));
     painter->setBrush(QBrush(greenBrush));
     painter->drawEllipse(mInternals->clusterMapPos, 32, 32);
 
     const QString strPoiCount = QString::number(mInternals->count);
-    painter->setFont(QFont("Arial", 20, QFont::Bold));
+    painter->setFont(QFont("Arial", 36, QFont::Bold));
     QFontMetrics fm(painter->font());
     const int poiCountPixelSize = fm.width(strPoiCount);
-    painter->setPen(Qt::red);
+    const int poiCountPixelSizeHeight = fm.height();
+    painter->setPen(Qt::white);
     painter->drawText(mInternals->clusterMapPos.x() - poiCountPixelSize / 2,
-        mInternals->clusterMapPos.y(), strPoiCount);
+        mInternals->clusterMapPos.y() + 16, strPoiCount);
 }
 
 QString PlacemarkCluster::projTooltip(const QPointF& projPos) const

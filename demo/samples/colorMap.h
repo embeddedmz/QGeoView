@@ -25,7 +25,7 @@ public:
     virtual QRgb rgb(const double min, const double max, double value) const = 0;
 
     QColor color(const double min, const double max, double value) const;
-    virtual QVector<QRgb> colorTable(const double min, const double max, ) const;
+    virtual QVector<QRgb> colorTable(const double min, const double max) const;
 };
 
 /*!
@@ -72,7 +72,7 @@ public:
         ColorStops();
 
         void insert(double pos, const QColor& color);
-        QRgb rgb(QwtLinearColorMap::Mode, double pos) const;
+        QRgb rgb(LinearColorMap::Mode, double pos) const;
 
         QVector<double> stops() const;
 
@@ -93,16 +93,12 @@ public:
             double posStep;
         };
 
-        inline int findUpper(double pos) const;
+        int findUpper(double pos) const;
         QVector<ColorStop> d_stops;
         bool d_doAlpha;
     };
 
 private:
-    // Disabled copy constructor and operator=
-    LinearColorMap(const LinearColorMap&) = delete;
-    LinearColorMap& operator=(const LinearColorMap&) = delete;
-
     ColorStops d_colorStops;
     Mode d_mode;
 };

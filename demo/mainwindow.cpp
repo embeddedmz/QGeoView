@@ -18,19 +18,18 @@
 
 #include "mainwindow.h"
 #include "samples/background.h"
+#include "samples/clusteringMarkersDemo.h"
 #include "samples/customtiles.h"
 #include "samples/flags.h"
+#ifdef BUILD_GDAL_EXAMPLE
+#include "samples/geotiffDemo.h"
+#endif
 #include "samples/items.h"
 #include "samples/mouse.h"
+#include "samples/pathColoring.h"
 #include "samples/utilities.h"
 #include "samples/widgets.h"
 #include "ui_mainwindow.h"
-
-#include "samples/polyline.h"
-#include "samples/placemark.h"
-#include "samples/placemarkCluster.h"
-#include "samples/placemarkSetLayer.h"
-#include "samples/raster.h"
 
 #include <QAction>
 #include <QClipboard>
@@ -133,7 +132,10 @@ void MainWindow::init()
     mDemo = {
         new WidgetsDemo(ui->geoMap, this),   new BackgroundDemo(ui->geoMap, this), new MouseDemo(ui->geoMap, this),
         new ItemsDemo(ui->geoMap, this),     new FlagsDemo(ui->geoMap, this),      new CustomTiles(ui->geoMap, this),
-        new UtilitiesDemo(ui->geoMap, this),
+        new UtilitiesDemo(ui->geoMap, this), new ClusteringMarkersDemo(ui->geoMap, this), new PathColoringDemo(ui->geoMap, this)
+        #ifdef BUILD_GDAL_EXAMPLE
+        , new GeotiffDemo(ui->geoMap, this)
+        #endif
     };
     for (DemoItem* item : mDemo) {
         ui->demoList->addItem(item->label());
@@ -152,53 +154,6 @@ void MainWindow::init()
      */
     auto target = ui->geoMap->getProjection()->boundaryGeoRect();
     ui->geoMap->cameraTo(QGVCameraActions(ui->geoMap).scaleTo(target));
-
-    QVector<QGV::GeoPos> linePoints {
-        QGV::GeoPos { 43.28849853885284, -0.40097961338582416 },
-        QGV::GeoPos { 43.288607663101814, -0.4011056068729572 },
-        QGV::GeoPos { 43.28870169558679, -0.4012124625167549 },
-        QGV::GeoPos { 43.288837520817815, -0.40126349922217774 },
-        QGV::GeoPos { 43.289008175284756, -0.40080258793938295 },
-    };
-    ui->geoMap->addItem(new Polyline(linePoints, Qt::GlobalColor::red));
-    ui->geoMap->addItem(new Placemark(QGV::GeoPos(43.28885725761855, -0.40090465730287766)));
-
-    // plus tard...
-    //ui->geoMap->addWidget(new QGVWidgetColorBar());
-
-    //QString url = R"(C:\\Users\\Amine Mzoughi\\Desktop\\blu-circle.png)";
-    /*QString url = R"(C:\\Users\\mmzoughi\\Pictures\\blu-circle.png)";
-    QPixmap pix(url);*/
-
-    QPixmap pix(64, 64);
-    QPainter paint(&pix);
-    QPolygon triangle = QVector<QPoint>{ QPoint{ 0, 0 }, QPoint{ 32, 63 }, QPoint{ 63, 0 } };
-    paint.setPen(QPen(QBrush(Qt::GlobalColor::red),
-                         1,
-                         Qt::PenStyle::SolidLine,
-                         Qt::PenCapStyle::RoundCap,
-                         Qt::PenJoinStyle::RoundJoin));
-    paint.setBrush(QBrush(Qt::GlobalColor::red));
-    paint.drawPolygon(triangle, Qt::WindingFill);
-    paint.end();
-
-    //ui->geoMap->addItem(new PlacemarkCluster(QGV::GeoPos(0, 0), {}, 10));
-    //return;
-
-    PlacemarkSetLayer* myPOIs = new PlacemarkSetLayer();
-    // faudra le faire avant d'ajouter les POIs ou bien il faudra passer la geomap au ctor
-    // ou bien changer l'archi de la couche
-    ui->geoMap->addItem(myPOIs);
-    myPOIs->setClustering(true);
-    myPOIs->setClusteringTreeDepth(20);
-    //myPOIs->setClustering(false);
-    myPOIs->setImage(pix);
-    //myPOIs->add(QGV::GeoPos{ 0, 0 });
-    myPOIs->add(QGV::GeoPos{ 43.28849853885284, -0.40097961338582416 });
-    myPOIs->add(QGV::GeoPos{ 43.288607663101814, -0.4011056068729572 });
-    myPOIs->add(QGV::GeoPos{ 43.28870169558679, -0.4012124625167549 });
-    myPOIs->add(QGV::GeoPos{ 43.288837520817815, -0.40126349922217774 });
-    myPOIs->add(QGV::GeoPos{ 43.289008175284756, -0.40080258793938295 });
 }
 
 void MainWindow::stopCurrent()
