@@ -22,21 +22,16 @@
 
 #include "colorMap.h"
 
-class QGV_LIB_DECL QGVWidgetColorBar : public QGVWidget
+class QGVWidgetColorBar : public QGVWidget
 {
     Q_OBJECT
 
 public:
-    QGVWidgetColorBar(Qt::Orientation orientation = Qt::Horizontal);
+    QGVWidgetColorBar(Qt::Orientation orientation = Qt::Vertical);
     ~QGVWidgetColorBar() override;
-
-    void setAutoAdjust(bool autoAdjust);
-    bool getAutoAdjust() const;
 
     void setOrientation(Qt::Orientation orientation);
     Qt::Orientation getOrientation() const;
-
-    QString getDistanceLabel(int meters, int accuracy = 0) const;
 
     void setWidth(const int width);
     int getWidth() const;
@@ -47,7 +42,6 @@ public:
     double getMax() const;
 
 private:
-    void onCamera(const QGVCameraState& oldState, const QGVCameraState& newState) override;
     void paintEvent(QPaintEvent* event) override;
 
 private:

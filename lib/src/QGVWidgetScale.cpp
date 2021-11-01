@@ -63,6 +63,9 @@ bool QGVWidgetScale::getAutoAdjust() const
 void QGVWidgetScale::setOrientation(Qt::Orientation orientation)
 {
     mOrientation = orientation;
+
+    // TODO : setAnchor like in ctor missing ?
+
     if (getMap() == nullptr) {
         return;
     }

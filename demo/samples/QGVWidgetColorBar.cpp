@@ -31,9 +31,6 @@ const int minLengthPixel = 130;
 struct QGVWidgetColorBar::Internals
 {
     Qt::Orientation mOrientation;
-    bool mAutoAdjust;
-    int mScaleMeters;
-    int mScalePixels;
 
     double Min = 0.;
     double Max = 1.;
@@ -44,9 +41,6 @@ struct QGVWidgetColorBar::Internals
 QGVWidgetColorBar::QGVWidgetColorBar(Qt::Orientation orientation)
     : mInternals(new QGVWidgetColorBar::Internals)
 {
-    mInternals->mAutoAdjust = true;
-    mInternals->mScaleMeters = 0;
-    mInternals->mScalePixels = 0;
     mInternals->mOrientation = orientation;
     if (mInternals->mOrientation == Qt::Horizontal) {
         setAnchor(QPoint(10, 10), QSet<Qt::Edge>() << Qt::RightEdge << Qt::BottomEdge);
@@ -61,22 +55,6 @@ QGVWidgetColorBar::QGVWidgetColorBar(Qt::Orientation orientation)
 QGVWidgetColorBar::~QGVWidgetColorBar()
 {
     delete mInternals;
-}
-
-void QGVWidgetColorBar::setAutoAdjust(bool autoAdjust)
-{
-    mInternals->mAutoAdjust = autoAdjust;
-    if (getMap() == nullptr) {
-        setVisible(false);
-        return;
-    }
-    const QGVCameraState camState = getMap()->getCamera();
-    onCamera(camState, camState);
-}
-
-bool QGVWidgetColorBar::getAutoAdjust() const
-{
-    return mInternals->mAutoAdjust;
 }
 
 void QGVWidgetColorBar::setOrientation(Qt::Orientation orientation)
@@ -94,65 +72,10 @@ Qt::Orientation QGVWidgetColorBar::getOrientation() const
     return mInternals->mOrientation;
 }
 
-QString QGVWidgetColorBar::getDistanceLabel(int meters, int accuracy) const
-{
-    if (meters > 1000) {
-        return tr("%1 km").arg(QString::number(static_cast<double>(meters) / 1000, 'f', accuracy));
-    } else {
-        return tr("%1 m").arg(QString::number(static_cast<double>(meters), 'f', accuracy));
-    }
-}
-
-void QGVWidgetColorBar::onCamera(const QGVCameraState& oldState, const QGVCameraState& newState)
-{
-    QGVWidget::onCamera(oldState, newState);
-    const QPoint viewPoint1 = geometry().topLeft();
-    QPoint viewPoint2;
-    if (mInternals->mOrientation == Qt::Horizontal) {
-        viewPoint2 = QPoint(viewPoint1.x() + defaultLengthPixel, viewPoint1.y());
-    } else {
-        viewPoint2 = QPoint(viewPoint1.x(), viewPoint1.y() + defaultLengthPixel);
-    }
-
-    const QPointF projPoint1 = getMap()->mapToProj(viewPoint1);
-    const QPointF projPoint2 = getMap()->mapToProj(viewPoint2);
-    const QGVProjection* projection = getMap()->getProjection();
-    if (!projection->boundaryProjRect().contains(projPoint1) || !projection->boundaryProjRect().contains(projPoint2)) {
-        resize(QSize(0, 0));
-        repaint();
-        return;
-    }
-
-    int newLengthPixels = defaultLengthPixel;
-    int newLengthMeters = static_cast<int>(projection->geodesicMeters(projPoint1, projPoint2));
-    if (mInternals->mAutoAdjust) {
-        const double metersLog = qMax(1.0, log10(newLengthMeters));
-        const int meters10 = static_cast<int>(qPow(10, qFloor(metersLog)));
-        const double correction = static_cast<double>(meters10) / newLengthMeters;
-        newLengthMeters = meters10;
-        newLengthPixels = qCeil(correction * newLengthPixels);
-        if (newLengthPixels < minLengthPixel) {
-            const double factor = qPow(2, qCeil(log(minLengthPixel / newLengthPixels) * M_LOG2E));
-            newLengthMeters *= factor;
-            newLengthPixels *= factor;
-        }
-    }
-
-    if (mInternals->mScaleMeters != newLengthMeters || mInternals->mScalePixels != newLengthPixels) {
-        const int height = fontMetrics().boundingRect("W").height() + 5;
-        mInternals->mScaleMeters = newLengthMeters;
-        mInternals->mScalePixels = newLengthPixels;
-        if (mInternals->mOrientation == Qt::Horizontal) {
-            resize(QSize(mInternals->mScalePixels, height));
-        } else {
-            resize(QSize(height, mInternals->mScalePixels));
-        }
-        repaint();
-    }
-}
-
 void QGVWidgetColorBar::paintEvent(QPaintEvent* /*event*/)
 {
+    // TODO : add some labels near the color bar... a title too...
+
     if (size().isEmpty()) {
         return;
     }
@@ -191,6 +114,8 @@ void QGVWidgetColorBar::paintEvent(QPaintEvent* /*event*/)
 
         QPainter pmPainter(&pixmap);
         // pmPainter.translate(-paintRect.x(), -paintRect.y()); // ? todo ?
+        
+        pmPainter.setTransform(QGV::createTransfromAzimuth(rect().center(), -90.0));
 
         for (int y = paintRect.top(); y <= paintRect.bottom(); y++) {
             double value = mInternals->Min +
@@ -202,6 +127,10 @@ void QGVWidgetColorBar::paintEvent(QPaintEvent* /*event*/)
             pmPainter.drawLine(paintRect.left(), y, paintRect.right(), y);
         }
         pmPainter.end();
+
+        // draw pixmap
+        QPainter painter(this);
+        painter.drawPixmap(paintRect, pixmap);
     }
 
 }
