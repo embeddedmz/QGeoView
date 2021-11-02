@@ -17,6 +17,8 @@
  ****************************************************************************/
 
 #include "QGVWidgetColorBar.h"
+#include "colorMapPresets.h"
+
 #include <QGeoView/QGVMapQGView.h>
 
 #include <QPaintEvent>
@@ -35,7 +37,7 @@ struct QGVWidgetColorBar::Internals
     double Min = 0.;
     double Max = 1.;
     int Width = 10;
-    LinearColorMap ColorMap;
+    LinearColorMap ColorMap = ColorMapPresets::controlPointsToLinearColorMap(ColorMapPresets::Jet());
 };
 
 QGVWidgetColorBar::QGVWidgetColorBar(Qt::Orientation orientation)

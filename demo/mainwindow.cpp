@@ -35,8 +35,6 @@
 #include <QClipboard>
 #include <QDir>
 #include <QGeoView/QGVDrawItem.h>
-#include <QPainter>
-#include <QPixmap>
 
 MainWindow::MainWindow()
     : ui(new Ui::MainWindow)
@@ -134,7 +132,7 @@ void MainWindow::init()
         new ItemsDemo(ui->geoMap, this),     new FlagsDemo(ui->geoMap, this),      new CustomTiles(ui->geoMap, this),
         new UtilitiesDemo(ui->geoMap, this), new ClusteringMarkersDemo(ui->geoMap, this), new PathColoringDemo(ui->geoMap, this)
         #ifdef BUILD_GDAL_EXAMPLE
-        , new GeotiffDemo(ui->geoMap, this)
+        , new GeoTIFFDemo(ui->geoMap, this)
         #endif
     };
     for (DemoItem* item : mDemo) {
