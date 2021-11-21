@@ -39,8 +39,6 @@ QString ClusteringMarkersDemo::comment() const
 
 void ClusteringMarkersDemo::onInit()
 {
-
-
     // QString url = R"(C:\\Users\\Amine Mzoughi\\Desktop\\blu-circle.png)";
     // QString url = R"(C:\\Users\\mmzoughi\\Pictures\\blu-circle.png)";
     // QPixmap pix(url);
@@ -72,7 +70,7 @@ void ClusteringMarkersDemo::onInit()
     myPOIs->add(QGV::GeoPos{ 43.288837520817815, -0.40126349922217774 });
     myPOIs->add(QGV::GeoPos{ 43.289008175284756, -0.40080258793938295 });
 
-    selector()->addItem("", std::bind(&ClusteringMarkersDemo::setSelected, this, nullptr, std::placeholders::_1));
+    selector()->addItem("Clustering Markers Demo", std::bind(&ClusteringMarkersDemo::setSelected, this, nullptr, std::placeholders::_1));
     selector()->selectAll();
 }
 

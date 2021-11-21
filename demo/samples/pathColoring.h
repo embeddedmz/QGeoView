@@ -35,5 +35,7 @@ private:
     void onStart() override;
     void onEnd() override;
     void setSelected(void* something, bool selected);
+    void changeColorMap(void* something, bool selected);
+    void changeRange(void* something, bool selected);
 
 };

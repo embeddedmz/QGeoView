@@ -57,6 +57,38 @@ void PathColoringDemo::onInit()
 // plus tard...
 // ui->geoMap->addWidget(new QGVWidgetColorBar());
 
+    selector()->addItem("Path drawing demo",
+                        std::bind(&PathColoringDemo::setSelected, this, nullptr, std::placeholders::_1));
+    selector()->addItem("Change color map",
+                        std::bind(&PathColoringDemo::changeColorMap, this, nullptr, std::placeholders::_1));
+    selector()->addItem("Change range",
+                        std::bind(&PathColoringDemo::changeRange, this, nullptr, std::placeholders::_1));
+    selector()->select(0);
+}
+
+void PathColoringDemo::onStart()
+{
+    selector()->show();
+}
+
+void PathColoringDemo::onEnd()
+{
+    selector()->hide();
+}
+
+void PathColoringDemo::setSelected(void* something, bool selected)
+{
+    if (something == nullptr) {
+        return;
+    }
+}
+
+void PathColoringDemo::changeColorMap(void* something, bool selected)
+{
+    if (something == nullptr) {
+        return;
+    }
+
     LinearColorMap lcm = ColorMapPresets::controlPointsToLinearColorMap(ColorMapPresets::Jet());
 
     ColorMapPresetDialog dialog(geoMap());
@@ -64,6 +96,13 @@ void PathColoringDemo::onInit()
     // QObject::connect(&dialog, &ColorMapPresetDialog::presetApplied, [this]()
     //{ });
     dialog.exec();
+}
+
+void PathColoringDemo::changeRange(void* something, bool selected)
+{
+    if (something == nullptr) {
+        return;
+    }
 
     // retrieve the original range
     double rangeMin = 0;
@@ -82,24 +121,5 @@ void PathColoringDemo::onInit()
         if (dialogMinRange != rangeMin || dialogMaxRange != rangeMax) {
             // ....
         }
-    }
-
-    selector()->select(0);
-}
-
-void PathColoringDemo::onStart()
-{
-    selector()->show();
-}
-
-void PathColoringDemo::onEnd()
-{
-    selector()->hide();
-}
-
-void PathColoringDemo::setSelected(void* something, bool selected)
-{
-    if (something == nullptr) {
-        return;
     }
 }
