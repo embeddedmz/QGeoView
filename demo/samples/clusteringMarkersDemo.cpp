@@ -60,6 +60,7 @@ void ClusteringMarkersDemo::onInit()
     // ou bien changer l'archi de la couche
     geoMap()->addItem(myPOIs);
     myPOIs->setClustering(true);
+    myPOIs->setClusterDistance(500);
     myPOIs->setClusteringTreeDepth(20);
     // myPOIs->setClustering(false);
     myPOIs->setImage(pix);
